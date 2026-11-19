@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -131,8 +132,17 @@ class AppViewModel(
                     ReminderScheduler.scheduleNext(appContext, reminder)
                 }
                 silentRefresh(force = true, includeHolidays = true)
+            } else if (!repository.hasStoredSession()) {
+                // 首次安装/已退出：本地没有会话 Cookie，服务端必然返回未登录，直接展示登录页，
+                // 避免在弱网或服务器不可达时卡在加载页等待网络超时（最长可达数十秒）
+                _authState.value = AuthState.Unauthenticated
             } else {
-                when (val check = repository.verifySession()) {
+                // 有 Cookie 但无缓存用户（罕见）：校验会话，但限制等待时长，超时按未登录处理
+                val check = withTimeoutOrNull(SESSION_CHECK_TIMEOUT_MS) { repository.verifySession() }
+                when (check) {
+                    null -> {
+                        _authState.value = AuthState.Unauthenticated
+                    }
                     is ApiResult.Success -> {
                         if (check.data != null) {
                             _authState.value = AuthState.Authenticated
@@ -509,6 +519,8 @@ class AppViewModel(
     }
 
     companion object {
+        private const val SESSION_CHECK_TIMEOUT_MS = 5_000L
+
         fun factory(appContext: Context, repository: CalendarRepository): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")

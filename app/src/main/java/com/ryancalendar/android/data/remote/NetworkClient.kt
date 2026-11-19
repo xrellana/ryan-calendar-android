@@ -130,6 +130,14 @@ class PersistentCookieJar(
         }
     }
 
+    /** 是否存在未过期的持久化 Cookie（用于启动时判断是否值得发起会话校验请求）。 */
+    fun hasValidCookies(): Boolean {
+        synchronized(lock) {
+            val now = System.currentTimeMillis()
+            return memoryCache.values.any { it.expiresAt > now }
+        }
+    }
+
     fun clearAll() {
         synchronized(lock) {
             memoryCache.clear()

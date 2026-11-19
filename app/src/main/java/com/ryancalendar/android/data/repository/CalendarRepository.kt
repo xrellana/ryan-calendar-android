@@ -60,6 +60,9 @@ class CalendarRepository(
 
     suspend fun getCachedUser(): UserProfile? = settingsStore.getCachedUser()
 
+    /** 本地是否保存了会话 Cookie；没有时无需请求服务端即可判定为未登录。 */
+    fun hasStoredSession(): Boolean = cookieJar.hasValidCookies()
+
     suspend fun getEventsOnce(): List<CalendarEvent> = dao.getEventsOnce().map { it.toDomain() }
 
     suspend fun getCategoriesOnce(): List<CalendarCategory> {
