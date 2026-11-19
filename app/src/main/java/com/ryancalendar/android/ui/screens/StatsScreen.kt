@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ryancalendar.android.domain.model.CalendarCategory
+import com.ryancalendar.android.domain.model.CalendarEvent
 import com.ryancalendar.android.domain.util.ColorUtils
 import com.ryancalendar.android.domain.util.DateUtils
 import com.ryancalendar.android.ui.AppViewModel
@@ -50,11 +51,96 @@ import java.time.LocalDate
 import java.time.YearMonth
 import java.time.temporal.ChronoUnit
 
-private data class CategoryStatRow(
+data class CategoryStatRow(
     val category: CalendarCategory,
     val eventCount: Int,
     val coveredDays: Int
 )
+
+data class PeriodStatsSummary(
+    val totalEvents: Int,
+    val multiDayCount: Int,
+    val busyDays: Int,
+    val totalPeriodDays: Int,
+    val rows: List<CategoryStatRow>
+)
+
+internal fun computePeriodStats(
+    events: List<CalendarEvent>,
+    categories: List<CalendarCategory>,
+    rangeStart: LocalDate,
+    rangeEnd: LocalDate
+): PeriodStatsSummary {
+    val catMap = categories.associateBy { it.id }
+    val priorityMap = categories.mapIndexed { idx, cat -> cat.id to idx }.toMap()
+    val rangeStartStr = rangeStart.toString()
+    val rangeEndStr = rangeEnd.toString()
+
+    val matchedEvents = events.filter {
+        it.effectiveEndDate >= rangeStartStr && it.startDate <= rangeEndStr
+    }
+
+    val countByCat = mutableMapOf<String, Int>()
+    val daysByCat = mutableMapOf<String, MutableSet<LocalDate>>()
+    val allBusyDays = mutableSetOf<LocalDate>()
+
+    for (ev in matchedEvents) {
+        val catId = if (catMap.containsKey(ev.categoryId)) ev.categoryId else CalendarCategory.Fallback.id
+        countByCat[catId] = (countByCat[catId] ?: 0) + 1
+
+        val s = DateUtils.parseOrNull(ev.startDate) ?: continue
+        val e = DateUtils.parseOrNull(ev.effectiveEndDate) ?: s
+        val clampedS = if (s.isBefore(rangeStart)) rangeStart else s
+        val clampedE = if (e.isAfter(rangeEnd)) rangeEnd else e
+        val set = daysByCat.getOrPut(catId) { mutableSetOf() }
+        var cur = clampedS
+        while (!cur.isAfter(clampedE)) {
+            set.add(cur)
+            allBusyDays.add(cur)
+            cur = cur.plusDays(1)
+        }
+    }
+
+    val rows = buildList {
+        categories.forEach { cat ->
+            val cnt = countByCat[cat.id] ?: 0
+            if (cnt > 0) {
+                add(
+                    CategoryStatRow(
+                        category = cat,
+                        eventCount = cnt,
+                        coveredDays = daysByCat[cat.id]?.size ?: 0
+                    )
+                )
+            }
+        }
+        val fallbackCount = countByCat[CalendarCategory.Fallback.id] ?: 0
+        if (fallbackCount > 0) {
+            add(
+                CategoryStatRow(
+                    category = CalendarCategory.Fallback,
+                    eventCount = fallbackCount,
+                    coveredDays = daysByCat[CalendarCategory.Fallback.id]?.size ?: 0
+                )
+            )
+        }
+    }.sortedWith(
+        compareByDescending<CategoryStatRow> { it.eventCount }
+            .thenByDescending { it.coveredDays }
+            .thenBy { priorityMap[it.category.id] ?: Int.MAX_VALUE }
+    )
+
+    val multiDayCount = matchedEvents.count { it.isMultiDay }
+    val totalPeriodDays = ChronoUnit.DAYS.between(rangeStart, rangeEnd).toInt() + 1
+
+    return PeriodStatsSummary(
+        totalEvents = matchedEvents.size,
+        multiDayCount = multiDayCount,
+        busyDays = allBusyDays.size,
+        totalPeriodDays = totalPeriodDays,
+        rows = rows
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,69 +163,19 @@ fun StatsScreen(viewModel: AppViewModel) {
     }
 
     val statsSummary = remember(events, categories, rangeStart, rangeEnd) {
-        val catMap = categories.associateBy { it.id }
-        val rangeStartStr = rangeStart.toString()
-        val rangeEndStr = rangeEnd.toString()
-
-        val matchedEvents = events.filter {
-            it.effectiveEndDate >= rangeStartStr && it.startDate <= rangeEndStr
-        }
-
-        val countByCat = mutableMapOf<String, Int>()
-        val daysByCat = mutableMapOf<String, MutableSet<LocalDate>>()
-        val allBusyDays = mutableSetOf<LocalDate>()
-
-        for (ev in matchedEvents) {
-            val catId = if (catMap.containsKey(ev.categoryId)) ev.categoryId else CalendarCategory.Fallback.id
-            countByCat[catId] = (countByCat[catId] ?: 0) + 1
-
-            val s = DateUtils.parseOrNull(ev.startDate) ?: continue
-            val e = DateUtils.parseOrNull(ev.effectiveEndDate) ?: s
-            val clampedS = if (s.isBefore(rangeStart)) rangeStart else s
-            val clampedE = if (e.isAfter(rangeEnd)) rangeEnd else e
-            val set = daysByCat.getOrPut(catId) { mutableSetOf() }
-            var cur = clampedS
-            while (!cur.isAfter(clampedE)) {
-                set.add(cur)
-                allBusyDays.add(cur)
-                cur = cur.plusDays(1)
-            }
-        }
-
-        val rows = categories.map { cat ->
-            CategoryStatRow(
-                category = cat,
-                eventCount = countByCat[cat.id] ?: 0,
-                coveredDays = daysByCat[cat.id]?.size ?: 0
-            )
-        }.toMutableList()
-
-        val fallbackCount = countByCat[CalendarCategory.Fallback.id] ?: 0
-        if (fallbackCount > 0) {
-            rows.add(
-                CategoryStatRow(
-                    category = CalendarCategory.Fallback,
-                    eventCount = fallbackCount,
-                    coveredDays = daysByCat[CalendarCategory.Fallback.id]?.size ?: 0
-                )
-            )
-        }
-
-        val multiDayCount = matchedEvents.count { it.isMultiDay }
-        val totalPeriodDays = ChronoUnit.DAYS.between(rangeStart, rangeEnd).toInt() + 1
-
-        Triple(
-            matchedEvents.size,
-            Pair(multiDayCount, Pair(allBusyDays.size, totalPeriodDays)),
-            rows
+        computePeriodStats(
+            events = events,
+            categories = categories,
+            rangeStart = rangeStart,
+            rangeEnd = rangeEnd
         )
     }
 
-    val totalEvents = statsSummary.first
-    val multiDayCount = statsSummary.second.first
-    val busyDays = statsSummary.second.second.first
-    val totalPeriodDays = statsSummary.second.second.second
-    val rows = statsSummary.third
+    val totalEvents = statsSummary.totalEvents
+    val multiDayCount = statsSummary.multiDayCount
+    val busyDays = statsSummary.busyDays
+    val totalPeriodDays = statsSummary.totalPeriodDays
+    val rows = statsSummary.rows
 
     Column(
         modifier = Modifier
@@ -237,16 +273,54 @@ fun StatsScreen(viewModel: AppViewModel) {
             }
 
             item(key = "breakdown_title") {
-                Text(
-                    text = "各类别分布",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = AppColors.TextMain,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "各类别分布",
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppColors.TextMain
+                    )
+                    if (rows.isNotEmpty()) {
+                        Text(
+                            text = "按日程数由多到少",
+                            fontSize = 12.sp,
+                            color = AppColors.TextMuted
+                        )
+                    }
+                }
             }
 
-            items(rows, key = { it.category.id }) { row ->
+            if (rows.isEmpty()) {
+                item(key = "empty_stats") {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = AppColors.Surface,
+                        border = BorderStroke(1.dp, AppColors.BorderSubtle),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 28.dp, horizontal = 16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (statsMode == "year") "${statsYear}年暂无日程记录"
+                                else "${statsYear}年${statsMonth}月暂无日程记录",
+                                fontSize = 14.sp,
+                                color = AppColors.TextMuted
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(rows, key = { it.category.id }) { row ->
                 val style = ColorUtils.getEventColorStyle(row.category.color)
                 val ratio = if (totalEvents > 0) row.eventCount.toFloat() / totalEvents.toFloat() else 0f
                 val pct = (ratio * 100).toInt()
@@ -296,6 +370,7 @@ fun StatsScreen(viewModel: AppViewModel) {
                         )
                     }
                 }
+            }
             }
         }
     }

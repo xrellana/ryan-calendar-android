@@ -3,8 +3,10 @@ package com.ryancalendar.android
 import com.ryancalendar.android.domain.calendar.HolidayIndex
 import com.ryancalendar.android.domain.calendar.LunarCalendar
 import com.ryancalendar.android.domain.calendar.WeekLayoutEngine
+import com.ryancalendar.android.domain.model.CalendarCategory
 import com.ryancalendar.android.domain.model.CalendarEvent
 import com.ryancalendar.android.domain.util.DateUtils
+import com.ryancalendar.android.ui.screens.computePeriodStats
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -70,5 +72,33 @@ class DomainEngineTest {
         assertEquals(0, segA.lane)
         assertEquals(1, segB.lane)
         assertEquals(0, segC.lane)
+    }
+
+    @Test
+    fun statsFiltersZeroCountAndSortsDescending() {
+        val categories = CalendarCategory.Defaults
+        val events = listOf(
+            // cat-rest: 3 events
+            CalendarEvent(id = "r1", title = "休1", categoryId = "cat-rest", startDate = "2026-11-01"),
+            CalendarEvent(id = "r2", title = "休2", categoryId = "cat-rest", startDate = "2026-11-02"),
+            CalendarEvent(id = "r3", title = "休3", categoryId = "cat-rest", startDate = "2026-11-03"),
+            // cat-consulting: 1 event spanning 4 days
+            CalendarEvent(id = "c1", title = "咨询", categoryId = "cat-consulting", startDate = "2026-11-05", endDate = "2026-11-08"),
+            // cat-deadline: 1 event spanning 1 day (same count as consulting, fewer days)
+            CalendarEvent(id = "d1", title = "截止", categoryId = "cat-deadline", startDate = "2026-11-10")
+            // cat-assessment: 0 events -> should be hidden
+        )
+
+        val summary = computePeriodStats(
+            events = events,
+            categories = categories,
+            rangeStart = LocalDate.of(2026, 11, 1),
+            rangeEnd = LocalDate.of(2026, 11, 30)
+        )
+
+        assertEquals(5, summary.totalEvents)
+        assertEquals(3, summary.rows.size)
+        assertEquals(listOf("cat-rest", "cat-consulting", "cat-deadline"), summary.rows.map { it.category.id })
+        assertTrue(summary.rows.none { it.category.id == "cat-assessment" })
     }
 }
