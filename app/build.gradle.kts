@@ -6,6 +6,23 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+val appVersionName: String = (project.findProperty("versionName") as? String)
+    ?.trim()
+    ?.removePrefix("v")
+    ?.takeIf { it.isNotEmpty() }
+    ?: "1.0.0"
+
+val appVersionCode: Int = (project.findProperty("versionCode") as? String)
+    ?.trim()
+    ?.toIntOrNull()
+    ?: 10000
+
+val releaseKeystorePath: String? = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
+val hasReleaseSigning: Boolean = releaseKeystorePath != null &&
+    !System.getenv("KEYSTORE_PASSWORD").isNullOrBlank() &&
+    !System.getenv("KEY_ALIAS").isNullOrBlank() &&
+    !System.getenv("KEY_PASSWORD").isNullOrBlank()
+
 android {
     namespace = "com.ryancalendar.android"
     compileSdk = 35
@@ -14,8 +31,8 @@ android {
         applicationId = "com.ryancalendar.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = appVersionCode
+        versionName = appVersionName
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -23,9 +40,26 @@ android {
         }
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

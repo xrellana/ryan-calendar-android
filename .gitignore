@@ -1,7 +1,23 @@
-*.docx
-node_modules/
-/data/
-.env
-*.db
-*.db-shm
-*.db-wal
+# Gradle & Build outputs
+.gradle/
+build/
+app/build/
+captures/
+.cxx/
+
+# IDE & Local config
+.idea/
+*.iml
+local.properties
+
+# Signing keystores & secrets (NEVER commit!)
+keystore/
+*.jks
+*.keystore
+*.p12
+*.pepk
+*.env
+
+# OS files
+.DS_Store
+Thumbs.db
