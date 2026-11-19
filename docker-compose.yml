@@ -1,0 +1,20 @@
+services:
+  ryan-calendar:
+    build: .
+    container_name: ryan-calendar
+    restart: unless-stopped
+    ports:
+      # 默认仅监听本机 3000 端口，配合 Nginx/Caddy 或 Cloudflare Tunnel 暴露公网；
+      # 如需直接局域网访问，可在 .env 中将 BIND_ADDR 改为 0.0.0.0
+      - "${BIND_ADDR:-127.0.0.1}:${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=Asia/Shanghai
+      - DB_PATH=/app/data/calendar.db
+      - BACKUP_DIR=/app/data/backups
+      - TRUST_PROXY=${TRUST_PROXY:-true}
+      - COOKIE_SECURE=${COOKIE_SECURE:-auto}
+    volumes:
+      - ./data:/app/data

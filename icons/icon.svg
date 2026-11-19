@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="headerGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#2B6CD4"/>
+      <stop offset="100%" stop-color="#1E52A8"/>
+    </linearGradient>
+  </defs>
+  <!-- Background shadow/card -->
+  <rect x="24" y="24" width="464" height="464" rx="96" fill="#FFFFFF" stroke="#E2E8F0" stroke-width="12"/>
+  <!-- Top Header -->
+  <path d="M24 120 C24 67 67 24 120 24 L392 24 C445 24 488 67 488 120 L488 168 L24 168 Z" fill="url(#headerGrad)"/>
+  <!-- Calendar Rings -->
+  <rect x="140" y="64" width="28" height="64" rx="14" fill="#FFFFFF"/>
+  <rect x="344" y="64" width="28" height="64" rx="14" fill="#FFFFFF"/>
+  <!-- Grid / Schedule Bars -->
+  <!-- Row 1: Span Orange Bar -->
+  <rect x="76" y="214" width="224" height="44" rx="10" fill="#FFF3E5" stroke="#D97A12" stroke-width="6"/>
+  <rect x="322" y="214" width="114" height="44" rx="10" fill="#FCEAEA" stroke="#D93A3A" stroke-width="6"/>
+  <!-- Row 2: Blue Span Bar -->
+  <rect x="76" y="286" width="360" height="44" rx="10" fill="#EBF2FC" stroke="#2B6CD4" stroke-width="6"/>
+  <!-- Row 3: Green + Dots -->
+  <rect x="76" y="358" width="168" height="44" rx="10" fill="#E9F7EF" stroke="#2E9E5B" stroke-width="6"/>
+  <rect x="266" y="358" width="170" height="44" rx="10" fill="#F1F5F9"/>
+</svg>

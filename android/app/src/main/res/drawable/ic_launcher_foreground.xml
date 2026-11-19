@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.62"
+        android:scaleY="0.62"
+        android:translateX="20.52"
+        android:translateY="20.52">
+        <!-- Card border -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:strokeColor="#E2E8F0"
+            android:strokeWidth="2.5"
+            android:pathData="M24,6h60a18,18 0,0 1,18 18v60a18,18 0,0 1,-18 18h-60a18,18 0,0 1,-18 -18v-60a18,18 0,0 1,18 -18z" />
+        <!-- Header -->
+        <path
+            android:fillColor="#2563EB"
+            android:pathData="M6,24A18,18 0,0 1,24 6h60a18,18 0,0 1,18 18v12H6V24z" />
+        <!-- Rings -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M31,14h4a2,2 0,0 1,2 2v10a2,2 0,0 1,-2 2h-4a2,2 0,0 1,-2 -2v-10a2,2 0,0 1,2 -2z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M73,14h4a2,2 0,0 1,2 2v10a2,2 0,0 1,-2 2h-4a2,2 0,0 1,-2 -2v-10a2,2 0,0 1,2 -2z" />
+        <!-- Row 1 orange + red -->
+        <path
+            android:fillColor="#FFF3E5"
+            android:strokeColor="#D97A12"
+            android:strokeWidth="1.5"
+            android:pathData="M18,46h42a2.5,2.5 0,0 1,2.5 2.5v5a2.5,2.5 0,0 1,-2.5 2.5h-42a2.5,2.5 0,0 1,-2.5 -2.5v-5a2.5,2.5 0,0 1,2.5 -2.5z" />
+        <path
+            android:fillColor="#FCEAEA"
+            android:strokeColor="#D93A3A"
+            android:strokeWidth="1.5"
+            android:pathData="M70,46h20a2.5,2.5 0,0 1,2.5 2.5v5a2.5,2.5 0,0 1,-2.5 2.5h-20a2.5,2.5 0,0 1,-2.5 -2.5v-5a2.5,2.5 0,0 1,2.5 -2.5z" />
+        <!-- Row 2 blue -->
+        <path
+            android:fillColor="#EBF2FC"
+            android:strokeColor="#2B6CD4"
+            android:strokeWidth="1.5"
+            android:pathData="M18,62h72a2.5,2.5 0,0 1,2.5 2.5v5a2.5,2.5 0,0 1,-2.5 2.5h-72a2.5,2.5 0,0 1,-2.5 -2.5v-5a2.5,2.5 0,0 1,2.5 -2.5z" />
+        <!-- Row 3 green + subtle -->
+        <path
+            android:fillColor="#E9F7EF"
+            android:strokeColor="#2E9E5B"
+            android:strokeWidth="1.5"
+            android:pathData="M18,78h34a2.5,2.5 0,0 1,2.5 2.5v5a2.5,2.5 0,0 1,-2.5 2.5h-34a2.5,2.5 0,0 1,-2.5 -2.5v-5a2.5,2.5 0,0 1,2.5 -2.5z" />
+        <path
+            android:fillColor="#F1F5F9"
+            android:pathData="M62,78h28a2.5,2.5 0,0 1,2.5 2.5v5a2.5,2.5 0,0 1,-2.5 2.5h-28a2.5,2.5 0,0 1,-2.5 -2.5v-5a2.5,2.5 0,0 1,2.5 -2.5z" />
+    </group>
+</vector>

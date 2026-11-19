@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>工作日程</title>
+  <meta name="application-name" content="工作日程">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="工作日程">
+  <meta name="theme-color" content="#FFFFFF">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" sizes="192x192" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <noscript>
+    <div class="gate-screen">
+      <div class="gate-card">
+        <h1>需要启用 JavaScript</h1>
+        <p>工作日程表需要启用 JavaScript 才能正常使用，请在浏览器设置中开启后刷新重试。</p>
+      </div>
+    </div>
+  </noscript>
+
+  <!-- 浏览器兼容性提示 -->
+  <div id="compat-warning" class="gate-screen hidden" role="alert">
+    <div class="gate-card">
+      <h1>当前浏览器版本过低</h1>
+      <p id="compat-warning-detail">当前浏览器缺少必要的现代网页特性，部分功能可能无法正常工作。</p>
+      <p class="gate-hint">建议升级至 Chrome 80+、Edge 80+、Safari 16.4+ 或主流最新版手机浏览器；如在微信/内置浏览器中打开，请点击右上角选择“在默认浏览器中打开”。</p>
+    </div>
+  </div>
+
+  <!-- 初始加载态 -->
+  <div id="loading-screen" class="gate-screen">
+    <div class="gate-card loading-card">
+      <div class="loading-spinner" aria-hidden="true"></div>
+      <p id="loading-text">正在加载工作日程...</p>
+    </div>
+  </div>
+
+  <!-- 账号登录页 -->
+  <div id="login-screen" class="gate-screen hidden">
+    <div class="gate-card login-card">
+      <div class="login-brand">
+        <span class="brand-dot" aria-hidden="true"></span>
+        <span>工作日程</span>
+      </div>
+      <h1>账号登录</h1>
+      <p class="login-subtitle">登录后跨设备云端同步您的专属日程与台账安排</p>
+      <form id="login-form" class="login-form" novalidate>
+        <div class="form-field">
+          <label class="form-label" for="login-username">账号 ID</label>
+          <input id="login-username" name="username" class="input-control" type="text" autocomplete="username" placeholder="请输入账号 ID" required>
+        </div>
+        <div class="form-field">
+          <label class="form-label" for="login-password">密码</label>
+          <input id="login-password" name="password" class="input-control" type="password" autocomplete="current-password" placeholder="请输入密码" required>
+        </div>
+        <div id="login-error" class="field-error hidden" role="alert"></div>
+        <button id="login-submit" type="submit" class="btn btn-primary login-submit-btn">登录</button>
+      </form>
+      <p class="gate-hint login-foot-hint">如需开通账号或忘记密码，请联系管理员处理。</p>
+    </div>
+  </div>
+
+  <!-- 主应用外壳 -->
+  <div id="app-shell" class="app-shell hidden">
+    <!-- 顶栏 -->
+    <header class="topbar no-print">
+      <div class="topbar-left">
+        <div class="brand" title="工作日程">
+          <span class="brand-dot" aria-hidden="true"></span>
+          <span class="brand-name">工作日程</span>
+        </div>
+        <div class="nav-group">
+          <button type="button" id="btn-prev" class="icon-btn" aria-label="上一周期" title="上一周期（左方向键）">‹</button>
+          <button type="button" id="btn-today" class="btn btn-subtle btn-sm">今天</button>
+          <button type="button" id="btn-next" class="icon-btn" aria-label="下一周期" title="下一周期（右方向键）">›</button>
+          <h1 id="period-title" class="period-title">2026年11月</h1>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <div class="view-switcher" role="tablist" aria-label="日历视图切换">
+          <button type="button" class="view-tab active" data-view="month" role="tab" aria-selected="true">月</button>
+          <button type="button" class="view-tab" data-view="week" role="tab" aria-selected="false">周</button>
+          <button type="button" class="view-tab" data-view="year" role="tab" aria-selected="false">年</button>
+        </div>
+
+        <div class="action-group">
+          <button type="button" id="btn-admin" class="btn btn-outline hidden" title="管理员后台">管理</button>
+          <button type="button" id="btn-account" class="btn btn-subtle user-chip-btn" title="个人账号与日历订阅">
+            <span class="user-avatar-dot" aria-hidden="true"></span>
+            <span id="user-display-name" class="user-display-name">账号</span>
+          </button>
+          <button type="button" id="btn-more" class="btn btn-outline">更多</button>
+          <button type="button" id="btn-import" class="btn btn-outline">导入台账</button>
+          <button type="button" id="btn-new-event" class="btn btn-primary">+ 新建日程</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 打印专用头部 -->
+    <div id="print-header" class="print-only print-header">
+      <div class="print-title-row">
+        <span class="print-app-name">工作日程表</span>
+        <span id="print-period-title" class="print-period-title"></span>
+        <span id="print-timestamp" class="print-timestamp"></span>
+      </div>
+    </div>
+
+    <!-- 搜索与图例筛选栏 -->
+    <section class="filter-legend-shell">
+      <div class="search-toolbar no-print">
+        <div class="search-input-wrap">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input
+            id="search-input"
+            type="search"
+            class="search-input"
+            placeholder="搜索日程标题、备注、项目名或类别..."
+            aria-label="搜索日程"
+          >
+          <button type="button" id="btn-clear-search" class="search-clear-btn hidden" aria-label="清空搜索" title="清空搜索">×</button>
+        </div>
+        <div id="filter-status" class="filter-status hidden">
+          <span id="filter-status-text" class="filter-status-text"></span>
+          <button type="button" id="btn-clear-filters" class="btn btn-subtle btn-sm">清除筛选</button>
+        </div>
+      </div>
+
+      <section id="legend-bar" class="legend-bar" aria-label="日程类别图例与筛选"></section>
+
+      <!-- 搜索结果速览面板（输入关键词时展开，点击直达对应日程） -->
+      <section id="search-results-panel" class="search-results-panel hidden no-print" aria-label="搜索结果"></section>
+    </section>
+
+    <!-- 节假日覆盖范围提示 -->
+    <div id="year-coverage-banner" class="coverage-banner hidden no-print" role="status"></div>
+
+    <!-- 工作区双栏布局 -->
+    <main class="workspace-layout">
+      <section id="calendar-stage" class="calendar-stage" aria-live="polite"></section>
+      <aside id="sidebar" class="sidebar no-print" aria-label="日程辅助面板"></aside>
+    </main>
+  </div>
+
+  <!-- 唯一浮层容器 -->
+  <div id="modal-backdrop" class="modal-backdrop hidden" aria-hidden="true">
+    <div id="modal-dialog" class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="modal-title"></div>
+  </div>
+
+  <!-- 操作结果反馈 Toast -->
+  <div id="toast-container" class="toast-container no-print" aria-live="polite"></div>
+
+  <script defer src="js/config.js"></script>
+  <script defer src="js/holidays.js"></script>
+  <script defer src="js/lunar.js"></script>
+  <script defer src="js/color.js"></script>
+  <script defer src="js/date-utils.js"></script>
+  <script defer src="js/layout.js"></script>
+  <script defer src="js/api.js"></script>
+  <script defer src="js/storage.js"></script>
+  <script defer src="js/importer.js"></script>
+  <script defer src="js/views.js"></script>
+  <script defer src="js/modals.js"></script>
+  <script defer src="js/app.js"></script>
+</body>
+</html>
