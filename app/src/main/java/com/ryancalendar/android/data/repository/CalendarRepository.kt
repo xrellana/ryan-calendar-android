@@ -40,7 +40,7 @@ class CalendarRepository(
     private val _unauthorizedEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val unauthorizedEvents: SharedFlow<String> = _unauthorizedEvents.asSharedFlow()
 
-    val serverUrlFlow: Flow<String> = settingsStore.serverUrlFlow
+    val serverUrl: String = NetworkClientFactory.SERVER_BASE_URL
     val currentUserFlow: Flow<UserProfile?> = settingsStore.cachedUserFlow
     val lastSyncMsFlow: Flow<Long> = settingsStore.lastSyncMsFlow
     val reminderSettingsFlow: Flow<ReminderSettings> = settingsStore.reminderSettingsFlow
@@ -57,12 +57,6 @@ class CalendarRepository(
         if (list.isEmpty()) HolidayIndex.Builtin
         else HolidayIndex.fromServerEntries(list.map { it.toDomain() })
     }
-
-    suspend fun init() {
-        settingsStore.initCache()
-    }
-
-    suspend fun getServerUrl(): String = settingsStore.getServerUrl()
 
     suspend fun getCachedUser(): UserProfile? = settingsStore.getCachedUser()
 
@@ -102,11 +96,7 @@ class CalendarRepository(
         user
     }
 
-    suspend fun login(serverUrl: String, username: String, password: String): ApiResult<UserProfile> {
-        val normalized = settingsStore.setServerUrl(serverUrl)
-        if (normalized.isBlank()) {
-            return ApiResult.Error("请输入正确的服务器地址")
-        }
+    suspend fun login(username: String, password: String): ApiResult<UserProfile> {
         return safeCall(notifyUnauthorized = false) {
             val res = api.login(LoginRequest(username = username.trim(), password = password))
             val user = res.user.toDomain()

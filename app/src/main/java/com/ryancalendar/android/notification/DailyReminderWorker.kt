@@ -29,7 +29,6 @@ class DailyReminderWorker(
     override suspend fun doWork(): Result {
         val app = applicationContext as? RyanCalendarApp ?: return Result.success()
         val repo = app.container.repository
-        repo.init()
 
         val settings = repo.getReminderSettings()
         if (!settings.enabled) {

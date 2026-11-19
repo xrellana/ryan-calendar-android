@@ -74,8 +74,7 @@ class AppViewModel(
     private val _toastMessages = MutableSharedFlow<String>(extraBufferCapacity = 4)
     val toastMessages: SharedFlow<String> = _toastMessages.asSharedFlow()
 
-    val serverUrl: StateFlow<String> = repository.serverUrlFlow
-        .stateIn(viewModelScope, SharingStarted.Eagerly, "")
+    val serverUrl: String = repository.serverUrl
 
     val currentUser: StateFlow<UserProfile?> = repository.currentUserFlow
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -122,14 +121,7 @@ class AppViewModel(
 
     private fun bootstrap() {
         viewModelScope.launch {
-            repository.init()
-            val savedUrl = repository.getServerUrl()
             val cachedUser = repository.getCachedUser()
-
-            if (savedUrl.isBlank()) {
-                _authState.value = AuthState.Unauthenticated
-                return@launch
-            }
 
             // 离线优先：有缓存用户时直接进入主界面，并在后台验证会话与同步最新日程
             if (cachedUser != null) {
@@ -157,11 +149,7 @@ class AppViewModel(
         }
     }
 
-    fun login(serverUrl: String, username: String, password: String) {
-        if (serverUrl.isBlank()) {
-            _loginError.value = "请输入云端服务器地址"
-            return
-        }
+    fun login(username: String, password: String) {
         if (username.isBlank() || password.isBlank()) {
             _loginError.value = "请输入账号 ID 和密码"
             return
@@ -169,7 +157,7 @@ class AppViewModel(
         viewModelScope.launch {
             _loginLoading.value = true
             _loginError.value = null
-            when (val res = repository.login(serverUrl, username, password)) {
+            when (val res = repository.login(username, password)) {
                 is ApiResult.Success -> {
                     _authState.value = AuthState.Authenticated
                     _loginLoading.value = false

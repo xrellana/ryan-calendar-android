@@ -49,12 +49,10 @@ import com.ryancalendar.android.ui.theme.AppColors
 
 @Composable
 fun LoginScreen(
-    initialServerUrl: String,
     isLoading: Boolean,
     errorMessage: String?,
-    onLogin: (serverUrl: String, username: String, password: String) -> Unit
+    onLogin: (username: String, password: String) -> Unit
 ) {
-    var serverUrl by rememberSaveable(initialServerUrl) { mutableStateOf(initialServerUrl) }
     var username by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var showPassword by rememberSaveable { mutableStateOf(false) }
@@ -112,21 +110,6 @@ fun LoginScreen(
                 Spacer(Modifier.height(20.dp))
 
                 OutlinedTextField(
-                    value = serverUrl,
-                    onValueChange = { serverUrl = it },
-                    label = { Text("服务器地址") },
-                    placeholder = { Text("例如 https://cal.example.com") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                        imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(12.dp))
-
-                OutlinedTextField(
                     value = username,
                     onValueChange = { username = it },
                     label = { Text("账号 ID") },
@@ -159,7 +142,7 @@ fun LoginScreen(
                     ),
                     keyboardActions = KeyboardActions(
                         onDone = {
-                            if (!isLoading) onLogin(serverUrl, username, password)
+                            if (!isLoading) onLogin(username, password)
                         }
                     ),
                     modifier = Modifier.fillMaxWidth()
@@ -184,7 +167,7 @@ fun LoginScreen(
                 Spacer(Modifier.height(20.dp))
 
                 Button(
-                    onClick = { onLogin(serverUrl, username, password) },
+                    onClick = { onLogin(username, password) },
                     enabled = !isLoading,
                     shape = RoundedCornerShape(10.dp),
                     modifier = Modifier

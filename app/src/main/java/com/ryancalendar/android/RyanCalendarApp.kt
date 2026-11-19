@@ -14,7 +14,7 @@ class AppContainer(context: Context) {
     val settingsStore = SettingsStore(context, json)
     val cookieJar = PersistentCookieJar(context, json)
     val database = CalendarDatabase.create(context)
-    val apiService = NetworkClientFactory.createApiService(settingsStore, cookieJar, json)
+    val apiService = NetworkClientFactory.createApiService(cookieJar, json)
     val repository = CalendarRepository(
         api = apiService,
         dao = database.calendarDao(),

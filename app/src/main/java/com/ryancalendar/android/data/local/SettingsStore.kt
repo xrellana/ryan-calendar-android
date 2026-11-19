@@ -23,20 +23,12 @@ class SettingsStore(
     private val json: Json
 ) {
     private object Keys {
-        val SERVER_URL = stringPreferencesKey("server_url")
         val CACHED_USER_JSON = stringPreferencesKey("cached_user_json")
         val LAST_SYNC_MS = longPreferencesKey("last_sync_ms")
         val SERVER_UPDATED_AT = stringPreferencesKey("server_updated_at")
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
-    }
-
-    @Volatile
-    private var cachedBaseUrl: String = ""
-
-    val serverUrlFlow: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[Keys.SERVER_URL].orEmpty()
     }
 
     val cachedUserFlow: Flow<UserProfile?> = context.dataStore.data.map { prefs ->
@@ -58,27 +50,6 @@ class SettingsStore(
             hour = prefs[Keys.REMINDER_HOUR] ?: 8,
             minute = prefs[Keys.REMINDER_MINUTE] ?: 30
         )
-    }
-
-    suspend fun initCache() {
-        cachedBaseUrl = serverUrlFlow.first()
-    }
-
-    fun getCachedServerUrlSync(): String = cachedBaseUrl
-
-    suspend fun getServerUrl(): String {
-        val url = serverUrlFlow.first()
-        cachedBaseUrl = url
-        return url
-    }
-
-    suspend fun setServerUrl(rawUrl: String): String {
-        val normalized = normalizeServerUrl(rawUrl)
-        cachedBaseUrl = normalized
-        context.dataStore.edit { prefs ->
-            prefs[Keys.SERVER_URL] = normalized
-        }
-        return normalized
     }
 
     suspend fun saveUser(user: UserProfile?) {
@@ -131,17 +102,4 @@ class SettingsStore(
     }
 
     suspend fun getReminderSettings(): ReminderSettings = reminderSettingsFlow.first()
-
-    companion object {
-        fun normalizeServerUrl(input: String): String {
-            var url = input.trim()
-            if (url.isEmpty()) return ""
-            if (!url.startsWith("http://", ignoreCase = true) &&
-                !url.startsWith("https://", ignoreCase = true)
-            ) {
-                url = "https://$url"
-            }
-            return url.trimEnd('/')
-        }
-    }
 }

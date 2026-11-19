@@ -78,7 +78,6 @@ private object Routes {
 @Composable
 fun RyanCalendarRoot(viewModel: AppViewModel) {
     val authState by viewModel.authState.collectAsState()
-    val serverUrl by viewModel.serverUrl.collectAsState()
     val loginLoading by viewModel.loginLoading.collectAsState()
     val loginError by viewModel.loginError.collectAsState()
 
@@ -110,10 +109,9 @@ fun RyanCalendarRoot(viewModel: AppViewModel) {
             Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
                 Box(modifier = Modifier.padding(padding)) {
                     LoginScreen(
-                        initialServerUrl = serverUrl,
                         isLoading = loginLoading,
                         errorMessage = loginError,
-                        onLogin = { url, user, pwd -> viewModel.login(url, user, pwd) }
+                        onLogin = { user, pwd -> viewModel.login(user, pwd) }
                     )
                 }
             }

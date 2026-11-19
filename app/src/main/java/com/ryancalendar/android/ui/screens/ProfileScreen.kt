@@ -84,7 +84,7 @@ fun ProfileScreen(
     val clipboard = LocalClipboardManager.current
 
     val user by viewModel.currentUser.collectAsState()
-    val serverUrl by viewModel.serverUrl.collectAsState()
+    val serverUrl = viewModel.serverUrl
     val lastSyncMs by viewModel.lastSyncMs.collectAsState()
     val isSyncing by viewModel.isSyncing.collectAsState()
     val reminder by viewModel.reminderSettings.collectAsState()

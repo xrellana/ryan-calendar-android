@@ -1,14 +1,12 @@
 package com.ryancalendar.android.data.remote
 
 import android.content.Context
-import com.ryancalendar.android.data.local.SettingsStore
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -16,7 +14,6 @@ import okhttp3.Response
 import retrofit2.HttpException
 import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 @Serializable
@@ -146,44 +143,6 @@ class PersistentCookieJar(
 }
 
 /**
- * 动态服务器地址拦截器：根据用户在登录页配置的服务器 URL 实时重写请求 Host/Scheme/Port。
- */
-class DynamicBaseUrlInterceptor(
-    private val settingsStore: SettingsStore
-) : Interceptor {
-    override fun intercept(chain: Interceptor.Chain): Response {
-        val original = chain.request()
-        val configured = settingsStore.getCachedServerUrlSync()
-        if (configured.isBlank()) {
-            throw IOException("请先配置服务器地址")
-        }
-        val targetBase = configured.toHttpUrlOrNull()
-            ?: throw IOException("服务器地址格式无效：$configured")
-
-        val basePathSegments = targetBase.pathSegments.filter { it.isNotEmpty() }
-        val origPathSegments = original.url.pathSegments.filter { it.isNotEmpty() }
-
-        val newUrlBuilder = original.url.newBuilder()
-            .scheme(targetBase.scheme)
-            .host(targetBase.host)
-            .port(targetBase.port)
-            .encodedPath("/")
-
-        for (seg in basePathSegments) {
-            newUrlBuilder.addPathSegment(seg)
-        }
-        for (seg in origPathSegments) {
-            newUrlBuilder.addPathSegment(seg)
-        }
-
-        val updated = original.newBuilder()
-            .url(newUrlBuilder.build())
-            .build()
-        return chain.proceed(updated)
-    }
-}
-
-/**
  * 统一附加后端 CSRF 校验头（X-Requested-With: WorkCal）与禁止缓存头。
  */
 class CsrfHeaderInterceptor : Interceptor {
@@ -198,7 +157,8 @@ class CsrfHeaderInterceptor : Interceptor {
 }
 
 object NetworkClientFactory {
-    private const val PLACEHOLDER_BASE_URL = "https://placeholder.local/"
+    const val SERVER_BASE_URL = "https://calendar.meowoo.net"
+    private const val SERVER_BASE_URL_WITH_SLASH = "$SERVER_BASE_URL/"
 
     fun createJson(): Json = Json {
         ignoreUnknownKeys = true
@@ -207,13 +167,11 @@ object NetworkClientFactory {
     }
 
     fun createApiService(
-        settingsStore: SettingsStore,
         cookieJar: PersistentCookieJar,
         json: Json
     ): CalendarApiService {
         val client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
-            .addInterceptor(DynamicBaseUrlInterceptor(settingsStore))
             .addInterceptor(CsrfHeaderInterceptor())
             .connectTimeout(15, TimeUnit.SECONDS)
             .readTimeout(25, TimeUnit.SECONDS)
@@ -222,7 +180,7 @@ object NetworkClientFactory {
 
         val contentType = "application/json".toMediaType()
         val retrofit = Retrofit.Builder()
-            .baseUrl(PLACEHOLDER_BASE_URL)
+            .baseUrl(SERVER_BASE_URL_WITH_SLASH)
             .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
@@ -249,6 +207,6 @@ object NetworkClientFactory {
             }
             return code to (parsedMsg ?: "请求失败（HTTP $code）")
         }
-        return null to (throwable.message ?: "网络连接失败，请检查服务器地址与网络状态")
+        return null to (throwable.message ?: "网络连接失败，请检查网络状态后重试")
     }
 }
