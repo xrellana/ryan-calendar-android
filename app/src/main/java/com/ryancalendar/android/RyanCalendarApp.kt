@@ -8,19 +8,27 @@ import com.ryancalendar.android.data.remote.NetworkClientFactory
 import com.ryancalendar.android.data.remote.PersistentCookieJar
 import com.ryancalendar.android.data.repository.CalendarRepository
 import com.ryancalendar.android.notification.NotificationHelper
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import okhttp3.CookieJar
 
 class AppContainer(context: Context) {
     val json = NetworkClientFactory.createJson()
     val settingsStore = SettingsStore(context, json)
     val cookieJar = PersistentCookieJar(context, json)
     val database = CalendarDatabase.create(context)
+    val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     val apiService = NetworkClientFactory.createApiService(cookieJar, json)
+    val sessionlessApiService = NetworkClientFactory.createApiService(CookieJar.NO_COOKIES, json)
     val repository = CalendarRepository(
         api = apiService,
         dao = database.calendarDao(),
         settingsStore = settingsStore,
         cookieJar = cookieJar,
-        json = json
+        json = json,
+        sessionlessApi = sessionlessApiService,
+        appScope = appScope
     )
 }
 

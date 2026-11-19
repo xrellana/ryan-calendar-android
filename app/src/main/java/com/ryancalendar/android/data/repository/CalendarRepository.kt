@@ -18,11 +18,13 @@ import com.ryancalendar.android.domain.model.CalendarCategory
 import com.ryancalendar.android.domain.model.CalendarEvent
 import com.ryancalendar.android.domain.model.ReminderSettings
 import com.ryancalendar.android.domain.model.UserProfile
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 
 sealed class ApiResult<out T> {
@@ -35,7 +37,11 @@ class CalendarRepository(
     private val dao: CalendarDao,
     private val settingsStore: SettingsStore,
     private val cookieJar: PersistentCookieJar,
-    private val json: Json
+    private val json: Json,
+    /** 不挂 CookieJar 的独立客户端：后台注销时服务端的 Set-Cookie 不会影响之后的新登录态。 */
+    private val sessionlessApi: CalendarApiService,
+    /** 应用级协程作用域：后台注销请求不随 ViewModel 或页面销毁而取消。 */
+    private val appScope: CoroutineScope
 ) {
     private val _unauthorizedEvents = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val unauthorizedEvents: SharedFlow<String> = _unauthorizedEvents.asSharedFlow()
@@ -109,13 +115,19 @@ class CalendarRepository(
     }
 
     suspend fun logout(): ApiResult<Unit> {
-        // 尽量通知服务端销毁会话，即使断网也清理本地登录态
-        try {
-            api.logout()
-        } catch (_: Exception) {
-            // ignore network error on logout
-        }
+        // 先记下会话 Cookie，再立即清理本地登录态，界面无需等待网络即可回到登录页；
+        // 随后在后台尽力通知服务端销毁会话，断网或超时均忽略
+        val sessionCookie = cookieJar.cookieHeaderFor(NetworkClientFactory.serverHttpUrl)
         clearLocalSession()
+        if (sessionCookie != null) {
+            appScope.launch {
+                try {
+                    sessionlessApi.logout(sessionCookie)
+                } catch (_: Exception) {
+                    // ignore network error on logout
+                }
+            }
+        }
         return ApiResult.Success(Unit)
     }
 

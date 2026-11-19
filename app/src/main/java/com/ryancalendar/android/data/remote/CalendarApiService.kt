@@ -3,6 +3,7 @@ package com.ryancalendar.android.data.remote
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
+import retrofit2.http.Header
 import retrofit2.http.PATCH
 import retrofit2.http.POST
 import retrofit2.http.PUT
@@ -17,8 +18,12 @@ interface CalendarApiService {
     @POST("api/auth/login")
     suspend fun login(@Body request: LoginRequest): LoginResponse
 
+    /** 显式携带会话 Cookie，供不挂 CookieJar 的独立客户端在本地登录态清除后注销服务端会话。 */
     @POST("api/auth/logout")
-    suspend fun logout(@Body empty: Map<String, String> = emptyMap()): OkResponse
+    suspend fun logout(
+        @Header("Cookie") cookie: String,
+        @Body empty: Map<String, String> = emptyMap()
+    ): OkResponse
 
     @PUT("api/auth/profile")
     suspend fun updateProfile(@Body request: UpdateProfileRequest): LoginResponse

@@ -7,6 +7,7 @@ import kotlinx.serialization.json.Json
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -138,6 +139,13 @@ class PersistentCookieJar(
         }
     }
 
+    /** 生成发往 [url] 的 Cookie 请求头值（如 "workcal_sid=xxx"），无匹配 Cookie 时返回 null。 */
+    fun cookieHeaderFor(url: HttpUrl): String? {
+        val cookies = loadForRequest(url)
+        if (cookies.isEmpty()) return null
+        return cookies.joinToString("; ") { "${it.name}=${it.value}" }
+    }
+
     fun clearAll() {
         synchronized(lock) {
             memoryCache.clear()
@@ -174,8 +182,10 @@ object NetworkClientFactory {
         encodeDefaults = true
     }
 
+    val serverHttpUrl: HttpUrl = SERVER_BASE_URL_WITH_SLASH.toHttpUrl()
+
     fun createApiService(
-        cookieJar: PersistentCookieJar,
+        cookieJar: CookieJar,
         json: Json
     ): CalendarApiService {
         val client = OkHttpClient.Builder()
