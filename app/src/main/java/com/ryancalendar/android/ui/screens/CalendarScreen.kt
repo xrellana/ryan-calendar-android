@@ -1,6 +1,7 @@
 package com.ryancalendar.android.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,6 +23,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -48,6 +50,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -316,6 +319,7 @@ fun CalendarScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MonthCalendarContent(
     visibleMonth: YearMonth,
@@ -333,6 +337,13 @@ private fun MonthCalendarContent(
         .toInt()
         .coerceIn(0, TOTAL_MONTH_PAGES - 1)
     val pagerState = rememberPagerState(initialPage = targetPage, pageCount = { TOTAL_MONTH_PAGES })
+    val listState = rememberLazyListState()
+    val isDayHeaderPinned by remember(listState) {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 2 ||
+                (listState.firstVisibleItemIndex == 2 && listState.firstVisibleItemScrollOffset > 0)
+        }
+    }
 
     LaunchedEffect(targetPage) {
         if (pagerState.currentPage != targetPage) {
@@ -358,85 +369,97 @@ private fun MonthCalendarContent(
     val workdayName = holidays.getWorkdayName(selectedDateStr)
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 88.dp)
     ) {
-        item(key = "weekday_header") {
+        stickyHeader(key = "weekday_header") {
             WeekdayHeaderRow()
         }
 
         item(key = "month_pager") {
-            Surface(
-                color = AppColors.Surface,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                HorizontalPager(
-                    state = pagerState,
-                    beyondViewportPageCount = 1,
-                    verticalAlignment = Alignment.Top,
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    color = AppColors.Surface,
                     modifier = Modifier.fillMaxWidth()
-                ) { page ->
-                    val ym = BASE_YEAR_MONTH.plusMonths(page.toLong())
-                    MonthGrid(
-                        yearMonth = ym,
-                        selectedDate = selectedDate,
-                        events = events,
-                        categoryMap = categoryMap,
-                        priorityMap = priorityMap,
-                        holidays = holidays,
-                        onSelectDate = onSelectDate
-                    )
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        beyondViewportPageCount = 1,
+                        verticalAlignment = Alignment.Top,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { page ->
+                        val ym = BASE_YEAR_MONTH.plusMonths(page.toLong())
+                        MonthGrid(
+                            yearMonth = ym,
+                            selectedDate = selectedDate,
+                            events = events,
+                            categoryMap = categoryMap,
+                            priorityMap = priorityMap,
+                            holidays = holidays,
+                            onSelectDate = onSelectDate
+                        )
+                    }
                 }
+                HorizontalDivider(color = AppColors.BorderSubtle)
             }
-            HorizontalDivider(color = AppColors.BorderSubtle)
         }
 
-        item(key = "selected_day_header") {
-            Row(
+        stickyHeader(key = "selected_day_header") {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .background(if (isDayHeaderPinned) AppColors.Surface else AppColors.CanvasBg)
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 ${DateUtils.weekdayLabel(selectedDate)}",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = AppColors.TextMain
-                        )
-                        if (holidayName != null) {
-                            Spacer(Modifier.width(8.dp))
-                            SmallDayBadge(text = "休 · $holidayName", isHoliday = true)
-                        } else if (workdayName != null) {
-                            Spacer(Modifier.width(8.dp))
-                            SmallDayBadge(text = "班 · 调休", isHoliday = false)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "${selectedDate.monthValue}月${selectedDate.dayOfMonth}日 ${DateUtils.weekdayLabel(selectedDate)}",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = AppColors.TextMain
+                            )
+                            if (holidayName != null) {
+                                Spacer(Modifier.width(8.dp))
+                                SmallDayBadge(text = "休 · $holidayName", isHoliday = true)
+                            } else if (workdayName != null) {
+                                Spacer(Modifier.width(8.dp))
+                                SmallDayBadge(text = "班 · 调休", isHoliday = false)
+                            }
+                        }
+                        val sub = buildString {
+                            if (selectedLunar.fullDisplay.isNotEmpty()) {
+                                append("农历${selectedLunar.fullDisplay}")
+                            }
+                            if (selectedLunar.solarTerm.isNotEmpty()) {
+                                if (isNotEmpty()) append(" · ")
+                                append(selectedLunar.solarTerm)
+                            }
+                            if (selectedLunar.festival.isNotEmpty() && selectedLunar.festival != holidayName) {
+                                if (isNotEmpty()) append(" · ")
+                                append(selectedLunar.festival)
+                            }
+                        }
+                        if (sub.isNotEmpty()) {
+                            Spacer(Modifier.height(2.dp))
+                            Text(text = sub, fontSize = 12.sp, color = AppColors.TextMuted)
                         }
                     }
-                    val sub = buildString {
-                        if (selectedLunar.fullDisplay.isNotEmpty()) {
-                            append("农历${selectedLunar.fullDisplay}")
-                        }
-                        if (selectedLunar.solarTerm.isNotEmpty()) {
-                            if (isNotEmpty()) append(" · ")
-                            append(selectedLunar.solarTerm)
-                        }
-                        if (selectedLunar.festival.isNotEmpty() && selectedLunar.festival != holidayName) {
-                            if (isNotEmpty()) append(" · ")
-                            append(selectedLunar.festival)
-                        }
-                    }
-                    if (sub.isNotEmpty()) {
-                        Spacer(Modifier.height(2.dp))
-                        Text(text = sub, fontSize = 12.sp, color = AppColors.TextMuted)
-                    }
+                    Text(
+                        text = "${selectedDayEvents.size} 条日程",
+                        fontSize = 12.sp,
+                        color = AppColors.TextMuted
+                    )
                 }
-                Text(
-                    text = "${selectedDayEvents.size} 条日程",
-                    fontSize = 12.sp,
-                    color = AppColors.TextMuted
+                HorizontalDivider(
+                    color = if (isDayHeaderPinned) AppColors.BorderSubtle else Color.Transparent
                 )
             }
         }
@@ -484,25 +507,30 @@ private fun MonthCalendarContent(
 
 @Composable
 private fun WeekdayHeaderRow() {
-    Row(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(AppColors.Surface)
-            .padding(vertical = 6.dp)
     ) {
-        DateUtils.WeekdayHeaders.forEachIndexed { idx, label ->
-            val isWeekend = idx >= 5
-            Text(
-                text = label,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = if (isWeekend) AppColors.Danger else AppColors.TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f)
-            )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 6.dp)
+        ) {
+            DateUtils.WeekdayHeaders.forEachIndexed { idx, label ->
+                val isWeekend = idx >= 5
+                Text(
+                    text = label,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = if (isWeekend) AppColors.Danger else AppColors.TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
+        HorizontalDivider(color = AppColors.BorderSubtle)
     }
-    HorizontalDivider(color = AppColors.BorderSubtle)
 }
 
 @Composable
