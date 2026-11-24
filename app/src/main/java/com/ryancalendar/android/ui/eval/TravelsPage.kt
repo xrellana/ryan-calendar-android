@@ -1,6 +1,7 @@
 package com.ryancalendar.android.ui.eval
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,12 +21,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.DirectionsCar
+import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.LocalTaxi
@@ -60,6 +63,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -248,7 +252,7 @@ fun TravelsPage(
                         }
                     }
 
-                    else -> items(ui.groups, key = { it.key }) { g ->
+                    ui.merged -> items(ui.groups, key = { it.key }) { g ->
                         TravelGroupCard(
                             group = g,
                             selected = selected,
@@ -257,15 +261,50 @@ fun TravelsPage(
                             todayYear = todayYear,
                             onToggle = viewModel::toggleTravelSelection,
                             onOpen = onOpenTravel,
-                            onReimb = viewModel::setTravelReimb
+                            onReimb = viewModel::setTravelReimb,
+                            onReorderDay = viewModel::reorderTravelDay
                         )
+                    }
+
+                    // Unmerged: every card is one travel, so a day's consecutive cards are
+                    // dragged as one block. Dates are unique per block because the list is
+                    // sorted by date first.
+                    else -> items(dayRuns(ui.groups) { it.first.date }, key = { "day:" + it[0].first.date }) { run ->
+                        val card: @Composable (TravelGroup, Modifier?, Boolean) -> Unit = { g, handle, dragging ->
+                            TravelGroupCard(
+                                group = g,
+                                selected = selected,
+                                selecting = selecting,
+                                enabled = !isMutating,
+                                todayYear = todayYear,
+                                onToggle = viewModel::toggleTravelSelection,
+                                onOpen = onOpenTravel,
+                                onReimb = viewModel::setTravelReimb,
+                                onReorderDay = viewModel::reorderTravelDay,
+                                singleRowHandle = handle,
+                                dragging = dragging
+                            )
+                        }
+                        if (run.size == 1 || selecting) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                run.forEach { card(it, null, false) }
+                            }
+                        } else {
+                            ReorderableColumn(
+                                items = run,
+                                key = { it.first.id },
+                                enabled = !isMutating,
+                                spacing = 10.dp,
+                                onReorder = { ids, onFailed -> viewModel.reorderTravelDay(run[0].first.date, ids, onFailed) }
+                            ) { g, handle, dragging -> card(g, handle, dragging) }
+                        }
                     }
                 }
 
                 if (!showSummary && ui.filteredCount > 0 && !selecting) {
                     item(key = "hint") {
                         Text(
-                            "长按差旅可多选，批量修改报销状态",
+                            "长按差旅可多选，批量修改报销状态；同一天有多笔时，按住右侧拖动手柄可调整先后",
                             fontSize = 11.sp,
                             color = AppColors.TextMuted,
                             modifier = Modifier.padding(horizontal = 4.dp)
@@ -307,10 +346,17 @@ private fun TravelGroupCard(
     todayYear: Int,
     onToggle: (String) -> Unit,
     onOpen: (String) -> Unit,
-    onReimb: (String, String) -> Unit
+    onReimb: (String, String) -> Unit,
+    onReorderDay: (date: String, ids: List<String>, onFailed: () -> Unit) -> Unit,
+    /** Unmerged list: drag handle of the card's only row, supplied by the day block around it. */
+    singleRowHandle: Modifier? = null,
+    dragging: Boolean = false
 ) {
     val anySelected = group.rows.any { it.id in selected }
-    EvalCard(highlighted = anySelected && group.rows.all { it.id in selected }) {
+    EvalCard(
+        highlighted = anySelected && group.rows.all { it.id in selected },
+        modifier = if (dragging) Modifier.shadow(8.dp, RoundedCornerShape(14.dp)) else Modifier
+    ) {
         Column {
             Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 4.dp)) {
                 Text(
@@ -335,7 +381,7 @@ private fun TravelGroupCard(
                 }
             }
             HorizontalDivider(color = AppColors.BorderSubtle, modifier = Modifier.padding(horizontal = 14.dp))
-            group.rows.forEach { t ->
+            val line: @Composable (EvalTravel, Modifier?, Boolean) -> Unit = { t, handle, rowDragging ->
                 TravelLine(
                     t = t,
                     selected = t.id in selected,
@@ -344,8 +390,27 @@ private fun TravelGroupCard(
                     todayYear = todayYear,
                     onClick = { if (selecting) onToggle(t.id) else onOpen(t.id) },
                     onLongClick = { onToggle(t.id) },
-                    onReimb = { onReimb(t.id, it) }
+                    onReimb = { onReimb(t.id, it) },
+                    dragHandle = if (selecting) null else handle,
+                    dragging = rowDragging
                 )
+            }
+            if (group.rows.size == 1) {
+                line(group.rows[0], singleRowHandle, false)
+            } else {
+                // Merged card: same-day rows of this project group can be dragged among themselves.
+                dayRuns(group.rows) { it.date }.forEach { run ->
+                    if (run.size == 1 || selecting) {
+                        run.forEach { line(it, null, false) }
+                    } else {
+                        ReorderableColumn(
+                            items = run,
+                            key = { it.id },
+                            enabled = enabled,
+                            onReorder = { ids, onFailed -> onReorderDay(run[0].date, ids, onFailed) }
+                        ) { t, handle, rowDragging -> line(t, handle, rowDragging) }
+                    }
+                }
             }
             Spacer(Modifier.height(4.dp))
         }
@@ -362,14 +427,26 @@ private fun TravelLine(
     todayYear: Int,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    onReimb: (String) -> Unit
+    onReimb: (String) -> Unit,
+    /** Null hides the handle (single row on its day, or multi-select mode). */
+    dragHandle: Modifier? = null,
+    dragging: Boolean = false
 ) {
     val cat = EvalCore.travelDisplayCat(t)
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .then(
+                if (dragging) {
+                    Modifier
+                        .shadow(6.dp, RoundedCornerShape(10.dp))
+                        .background(AppColors.Surface, RoundedCornerShape(10.dp))
+                } else {
+                    Modifier
+                }
+            )
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+            .padding(start = 14.dp, end = if (dragHandle != null) 0.dp else 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (selecting) {
@@ -408,7 +485,30 @@ private fun TravelLine(
             enabled = enabled,
             onSelect = onReimb
         )
+        if (dragHandle != null) {
+            Box(
+                modifier = Modifier.size(width = 36.dp, height = 44.dp).then(dragHandle),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Outlined.DragIndicator,
+                    contentDescription = "按住拖动，调整当天顺序",
+                    tint = if (enabled) AppColors.TextMuted else AppColors.BorderStrong,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
     }
+}
+
+/** Splits a date-sorted list into runs of consecutive items sharing the same date. */
+private fun <T> dayRuns(list: List<T>, date: (T) -> String): List<List<T>> {
+    val runs = mutableListOf<MutableList<T>>()
+    list.forEach { item ->
+        val last = runs.lastOrNull()
+        if (last != null && date(last[0]) == date(item)) last.add(item) else runs.add(mutableListOf(item))
+    }
+    return runs
 }
 
 @Composable
