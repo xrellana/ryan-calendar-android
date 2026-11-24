@@ -40,6 +40,10 @@ interface EvalApiService {
     @POST("api/eval/travels/batch")
     suspend fun batchTravels(@Body body: JsonObject): EvalTravelMutationResponse
 
+    /** Body `{ date, ids }`: the full same-day order. 409 means local data is stale. */
+    @POST("api/eval/travels/reorder")
+    suspend fun reorderTravels(@Body body: JsonObject): EvalTravelMutationResponse
+
     @DELETE("api/eval/travels/{id}")
     suspend fun deleteTravel(@Path("id") id: String, @Query("today") today: String): EvalTravelMutationResponse
 

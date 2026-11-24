@@ -2,6 +2,7 @@ package com.ryancalendar.android.domain.eval
 
 import java.math.BigDecimal
 import java.math.RoundingMode
+import java.text.Collator
 import java.text.DecimalFormat
 import java.text.DecimalFormatSymbols
 import java.time.LocalDate
@@ -284,6 +285,43 @@ object EvalCore {
     fun travelDisplayCat(travel: EvalTravel): String {
         if (travel.cat == EvalEnums.CAT_CUSTOM) return travel.catCustom.trim().ifEmpty { EvalEnums.CAT_CUSTOM }
         return travel.cat.ifEmpty { EvalEnums.CAT_DEFAULT }
+    }
+
+    private val travelNameCollator: Collator = Collator.getInstance(Locale.CHINA)
+
+    /**
+     * Travel list order (docs/API.md §9): dates follow [ascending]; within a day the manual
+     * sortOrder always runs early-to-late regardless of the date direction, then name and
+     * createdAt keep ties (e.g. concurrent inserts) stable.
+     */
+    fun travelComparator(ascending: Boolean): Comparator<EvalTravel> = Comparator { a, b ->
+        if (a.date != b.date) {
+            return@Comparator if (ascending) a.date.compareTo(b.date) else b.date.compareTo(a.date)
+        }
+        if (a.sortOrder != b.sortOrder) return@Comparator a.sortOrder.compareTo(b.sortOrder)
+        val byName = travelNameCollator.compare(a.name, b.name)
+        if (byName != 0) byName else a.createdAt.compareTo(b.createdAt)
+    }
+
+    /**
+     * Full order of [date] to send to POST /api/eval/travels/reorder after the user rearranged
+     * [reorderedIds] (the rows visible together on screen) into a new sequence.
+     *
+     * The visible rows swap among the positions they already occupied in the day, so rows hidden
+     * by a filter or shown in another project group keep their exact place. Returns null when an
+     * id is unknown, duplicated or on another date, or when nothing changed.
+     */
+    fun buildTravelDayOrder(all: List<EvalTravel>, date: String, reorderedIds: List<String>): List<String>? {
+        if (reorderedIds.isEmpty() || reorderedIds.toSet().size != reorderedIds.size) return null
+        val day = all.filter { it.date == date }.sortedWith(travelComparator(ascending = true)).map { it.id }
+        val moving = reorderedIds.toHashSet()
+        if (!day.containsAll(moving)) return null
+        val result = day.toMutableList()
+        var next = 0
+        day.forEachIndexed { slot, id ->
+            if (id in moving) result[slot] = reorderedIds[next++]
+        }
+        return if (result == day) null else result
     }
 
     private val moneyFormat: ThreadLocal<DecimalFormat> = ThreadLocal.withInitial {

@@ -53,6 +53,8 @@ data class EvalTravelDto(
     val amount: Double = 0.0,
     val detail: String = "",
     val reimb: String = "未报",
+    /** Missing on servers older than the same-day ordering feature; 0 falls back to name order. */
+    val sortOrder: Int = 0,
     val createdAt: String = "",
     val updatedAt: String = ""
 ) {
@@ -71,7 +73,8 @@ data class EvalTravelDto(
         detail = detail,
         reimb = reimb,
         createdAt = createdAt,
-        updatedAt = updatedAt
+        updatedAt = updatedAt,
+        sortOrder = sortOrder
     )
 }
 

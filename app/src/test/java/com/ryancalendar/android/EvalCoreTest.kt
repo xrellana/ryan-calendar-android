@@ -14,6 +14,7 @@ import com.ryancalendar.android.domain.eval.ProjectSort
 import com.ryancalendar.android.domain.eval.ProjectSortField
 import com.ryancalendar.android.domain.eval.ProjectTimeType
 import com.ryancalendar.android.domain.eval.RangePreset
+import com.ryancalendar.android.domain.eval.TravelFilter
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -225,5 +226,75 @@ class EvalCoreTest {
         assertEquals("三级", groups[0].link.level)
         assertEquals("2026/12/13 ~ 2026/12/15", groups[0].link.planText)
         assertEquals(3, EvalStats.travelGroups(list, projects, merge = false).size)
+    }
+
+    // ------------------------------------------------------------ same-day travel order
+
+    private fun ordered(id: String, date: String, sortOrder: Int, name: String = "项目", createdAt: String = "") =
+        travel(id, name, 10.0, date = date).copy(sortOrder = sortOrder, createdAt = createdAt)
+
+    @Test
+    fun travelsSortBySortOrderWithinDayRegardlessOfDateDirection() {
+        val list = listOf(
+            ordered("a2", "2026-11-23", 2, name = "甲"),
+            ordered("b1", "2026-11-24", 1),
+            ordered("a1", "2026-11-23", 1, name = "乙"),
+            ordered("a3", "2026-11-23", 3, name = "丙")
+        )
+        val desc = EvalStats.filterTravels(list, TravelFilter(ascending = false)).map { it.id }
+        val asc = EvalStats.filterTravels(list, TravelFilter(ascending = true)).map { it.id }
+        assertEquals(listOf("b1", "a1", "a2", "a3"), desc)
+        assertEquals(listOf("a1", "a2", "a3", "b1"), asc)
+    }
+
+    @Test
+    fun travelsWithEqualSortOrderFallBackToNameThenCreatedAt() {
+        // Old servers send no sortOrder (0 everywhere): order stays the previous name order.
+        val list = listOf(
+            ordered("late", "2026-11-23", 0, name = "A", createdAt = "2026-11-23T02:00:00Z"),
+            ordered("b", "2026-11-23", 0, name = "B"),
+            ordered("early", "2026-11-23", 0, name = "A", createdAt = "2026-11-23T01:00:00Z")
+        )
+        assertEquals(listOf("early", "late", "b"), list.sortedWith(EvalCore.travelComparator(true)).map { it.id })
+    }
+
+    @Test
+    fun buildTravelDayOrderReturnsWholeDayInNewOrder() {
+        val list = listOf(
+            ordered("t1", "2026-11-23", 1),
+            ordered("t2", "2026-11-23", 2),
+            ordered("t3", "2026-11-23", 3),
+            ordered("other", "2026-11-24", 1)
+        )
+        assertEquals(listOf("t3", "t1", "t2"), EvalCore.buildTravelDayOrder(list, "2026-11-23", listOf("t3", "t1", "t2")))
+    }
+
+    @Test
+    fun buildTravelDayOrderKeepsRowsNotOnScreenInPlace() {
+        // h1 / h2 are filtered out or live in another project group; only v1..v3 were dragged.
+        val list = listOf(
+            ordered("v1", "2026-11-23", 1),
+            ordered("h1", "2026-11-23", 2),
+            ordered("v2", "2026-11-23", 3),
+            ordered("v3", "2026-11-23", 4),
+            ordered("h2", "2026-11-23", 5)
+        )
+        assertEquals(
+            listOf("v3", "h1", "v1", "v2", "h2"),
+            EvalCore.buildTravelDayOrder(list, "2026-11-23", listOf("v3", "v1", "v2"))
+        )
+    }
+
+    @Test
+    fun buildTravelDayOrderRejectsUnchangedForeignOrDuplicateIds() {
+        val list = listOf(
+            ordered("t1", "2026-11-23", 1),
+            ordered("t2", "2026-11-23", 2),
+            ordered("x", "2026-11-24", 1)
+        )
+        assertNull(EvalCore.buildTravelDayOrder(list, "2026-11-23", listOf("t1", "t2")))
+        assertNull(EvalCore.buildTravelDayOrder(list, "2026-11-23", listOf("x", "t1")))
+        assertNull(EvalCore.buildTravelDayOrder(list, "2026-11-23", listOf("t2", "t2")))
+        assertNull(EvalCore.buildTravelDayOrder(list, "2026-11-23", emptyList()))
     }
 }

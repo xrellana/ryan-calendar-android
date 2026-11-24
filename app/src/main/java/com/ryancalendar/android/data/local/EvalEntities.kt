@@ -46,17 +46,18 @@ data class EvalTravelEntity(
     val detail: String,
     val reimb: String,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val sortOrder: Int
 ) {
     fun toDomain() = EvalTravel(
-        id, date, name, stage, level, planStart, planEnd, planText, cat, catCustom, amount, detail, reimb, createdAt, updatedAt
+        id, date, name, stage, level, planStart, planEnd, planText, cat, catCustom, amount, detail, reimb, createdAt, updatedAt, sortOrder
     )
 }
 
 fun EvalProject.toEntity() = EvalProjectEntity(id, name, level, role, stage, start, end, status, settle, note, feeManual, createdAt, updatedAt)
 
 fun EvalTravel.toEntity() = EvalTravelEntity(
-    id, date, name, stage, level, planStart, planEnd, planText, cat, catCustom, amount, detail, reimb, createdAt, updatedAt
+    id, date, name, stage, level, planStart, planEnd, planText, cat, catCustom, amount, detail, reimb, createdAt, updatedAt, sortOrder
 )
 
 @Dao
