@@ -1,6 +1,8 @@
 package com.ryancalendar.android.data.repository
 
 import com.ryancalendar.android.data.local.CalendarDao
+import com.ryancalendar.android.data.local.CategoryEntity
+import com.ryancalendar.android.data.local.EventEntity
 import com.ryancalendar.android.data.local.SettingsStore
 import com.ryancalendar.android.data.local.toEntity
 import com.ryancalendar.android.data.remote.CalendarApiService
@@ -12,6 +14,7 @@ import com.ryancalendar.android.data.remote.LoginRequest
 import com.ryancalendar.android.data.remote.NetworkClientFactory
 import com.ryancalendar.android.data.remote.PersistentCookieJar
 import com.ryancalendar.android.data.remote.ReorderCategoriesRequest
+import com.ryancalendar.android.data.remote.StateResponse
 import com.ryancalendar.android.data.remote.UpdateProfileRequest
 import com.ryancalendar.android.domain.calendar.HolidayIndex
 import com.ryancalendar.android.domain.model.CalendarCategory
@@ -78,7 +81,7 @@ class CalendarRepository(
 
     suspend fun getEventById(id: String): CalendarEvent? = dao.getEventById(id)?.toDomain()
 
-    private suspend fun <T> safeCall(
+    internal suspend fun <T> safeCall(
         notifyUnauthorized: Boolean = true,
         block: suspend () -> T
     ): ApiResult<T> {
@@ -147,15 +150,7 @@ class CalendarRepository(
         val prevCatCount = dao.getCategoriesOnce().size
 
         val state = api.getState()
-        val catEntities = state.categories.mapIndexed { index, dto ->
-            dto.toDomain(index).toEntity(index)
-        }
-        val eventEntities = state.events
-            .map { it.toDomain() }
-            .filter { it.title.isNotBlank() && it.startDate.isNotBlank() }
-            .map { it.toEntity() }
-
-        dao.replaceState(catEntities, eventEntities)
+        val (catEntities, eventEntities) = writeCalendarState(state)
 
         if (includeHolidays) {
             try {
@@ -170,12 +165,27 @@ class CalendarRepository(
             }
         }
 
-        val nowMs = System.currentTimeMillis()
-        settingsStore.saveSyncMeta(nowMs, state.updatedAt)
-
         state.updatedAt != prevUpdatedAt ||
             eventEntities.size != prevEventsCount ||
             catEntities.size != prevCatCount
+    }
+
+    private suspend fun writeCalendarState(state: StateResponse): Pair<List<CategoryEntity>, List<EventEntity>> {
+        val catEntities = state.categories.mapIndexed { index, dto ->
+            dto.toDomain(index).toEntity(index)
+        }
+        val eventEntities = state.events
+            .map { it.toDomain() }
+            .filter { it.title.isNotBlank() && it.startDate.isNotBlank() }
+            .map { it.toEntity() }
+        dao.replaceState(catEntities, eventEntities)
+        settingsStore.saveSyncMeta(System.currentTimeMillis(), state.updatedAt)
+        return catEntities to eventEntities
+    }
+
+    /** 评估模块的写接口会返回完整日程状态，直接落库以保证两个模块数据一致。 */
+    internal suspend fun applyCalendarState(state: StateResponse) {
+        writeCalendarState(state)
     }
 
     // -------------------------------------------------------------------------
@@ -259,10 +269,12 @@ class CalendarRepository(
         updated
     }
 
-    suspend fun deleteEvent(eventId: String): ApiResult<Unit> = safeCall {
-        api.deleteEvent(eventId)
+    /** @return 随日程一并删除的评估项目 id，普通日程返回空字符串。 */
+    suspend fun deleteEvent(eventId: String): ApiResult<String> = safeCall {
+        val res = api.deleteEvent(eventId)
         dao.deleteEventById(eventId)
         settingsStore.saveSyncMeta(System.currentTimeMillis(), "")
+        res.deletedEvalProjectId
     }
 
     // -------------------------------------------------------------------------

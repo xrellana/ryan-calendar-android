@@ -60,12 +60,17 @@ data class CalendarEvent(
     val startTime: String = "", // HH:mm
     val endTime: String = "", // HH:mm
     val notes: String = "",
-    val source: String = "manual", // manual | ledger
+    val source: String = "manual", // manual | ledger | eval
     val ledgerKey: String = "",
     val ledgerMeta: LedgerMeta? = null,
+    /** Non-empty when the event is generated from an evaluation project. */
+    val evalProjectId: String = "",
     val createdAt: String = "",
     val updatedAt: String = ""
 ) {
+    val isEvalLinked: Boolean
+        get() = evalProjectId.isNotBlank()
+
     val effectiveEndDate: String
         get() = if (endDate.isNotBlank() && endDate >= startDate) endDate else startDate
 

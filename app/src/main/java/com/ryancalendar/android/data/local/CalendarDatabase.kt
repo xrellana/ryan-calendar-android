@@ -6,12 +6,19 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Database(
-    entities = [CategoryEntity::class, EventEntity::class, HolidayEntity::class],
-    version = 1,
+    entities = [
+        CategoryEntity::class,
+        EventEntity::class,
+        HolidayEntity::class,
+        EvalProjectEntity::class,
+        EvalTravelEntity::class
+    ],
+    version = 2,
     exportSchema = false
 )
 abstract class CalendarDatabase : RoomDatabase() {
     abstract fun calendarDao(): CalendarDao
+    abstract fun evalDao(): EvalDao
 
     companion object {
         fun create(context: Context): CalendarDatabase =

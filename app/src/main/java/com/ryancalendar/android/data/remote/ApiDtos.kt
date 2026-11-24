@@ -118,6 +118,7 @@ data class EventDto(
     val source: String = "manual",
     val ledgerKey: String = "",
     val ledgerMeta: LedgerMetaDto? = null,
+    val evalProjectId: String = "",
     val createdAt: String = "",
     val updatedAt: String = ""
 ) {
@@ -134,6 +135,7 @@ data class EventDto(
         source = source,
         ledgerKey = ledgerKey,
         ledgerMeta = ledgerMeta?.toDomain(),
+        evalProjectId = evalProjectId,
         createdAt = createdAt,
         updatedAt = updatedAt
     )
@@ -213,5 +215,12 @@ data class EventUpsertRequest(
 
 @Serializable
 data class EventResponse(
-    val event: EventDto
+    val event: EventDto,
+    val evalProjectUpdated: Boolean = false
+)
+
+@Serializable
+data class DeleteEventResponse(
+    val ok: Boolean = true,
+    val deletedEvalProjectId: String = ""
 )

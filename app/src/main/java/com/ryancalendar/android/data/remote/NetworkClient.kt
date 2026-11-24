@@ -187,7 +187,12 @@ object NetworkClientFactory {
     fun createApiService(
         cookieJar: CookieJar,
         json: Json
-    ): CalendarApiService {
+    ): CalendarApiService = createRetrofit(cookieJar, json).create(CalendarApiService::class.java)
+
+    fun createRetrofit(
+        cookieJar: CookieJar,
+        json: Json
+    ): Retrofit {
         val client = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .addInterceptor(CsrfHeaderInterceptor())
@@ -197,13 +202,11 @@ object NetworkClientFactory {
             .build()
 
         val contentType = "application/json".toMediaType()
-        val retrofit = Retrofit.Builder()
+        return Retrofit.Builder()
             .baseUrl(SERVER_BASE_URL_WITH_SLASH)
             .client(client)
             .addConverterFactory(json.asConverterFactory(contentType))
             .build()
-
-        return retrofit.create(CalendarApiService::class.java)
     }
 
     fun parseErrorMessage(throwable: Throwable, json: Json): Pair<Int?, String> {
