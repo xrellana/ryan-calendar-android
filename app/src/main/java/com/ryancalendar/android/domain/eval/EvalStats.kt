@@ -571,13 +571,7 @@ object EvalStats {
             if (q.isNotEmpty() && !"${t.name} ${t.detail} $cat".lowercase().contains(q)) return@filter false
             true
         }
-        return filtered.sortedWith { a, b ->
-            if (a.date != b.date) {
-                if (f.ascending) a.date.compareTo(b.date) else b.date.compareTo(a.date)
-            } else {
-                zhCollator.compare(a.name, b.name)
-            }
-        }
+        return filtered.sortedWith(EvalCore.travelComparator(f.ascending))
     }
 
     fun travelTotals(list: List<EvalTravel>): TravelTotals {

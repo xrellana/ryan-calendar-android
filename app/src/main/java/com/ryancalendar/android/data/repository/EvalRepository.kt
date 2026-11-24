@@ -234,6 +234,16 @@ class EvalRepository(
         res.updatedCount
     }
 
+    /** [ids] is every travel of [date] in the new order (see EvalCore.buildTravelDayOrder). */
+    suspend fun reorderTravels(date: String, ids: List<String>): ApiResult<Unit> = calendarRepository.safeCall {
+        val res = api.reorderTravels(buildJsonObject {
+            put("date", date)
+            putJsonArray("ids") { ids.forEach { add(JsonPrimitive(it)) } }
+            put("today", today())
+        })
+        applyEvalState(res.evalState)
+    }
+
     suspend fun deleteTravel(id: String): ApiResult<Unit> = calendarRepository.safeCall {
         val res = api.deleteTravel(id, today())
         applyEvalState(res.evalState)

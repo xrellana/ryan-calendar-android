@@ -70,6 +70,8 @@ data class TravelListUi(
     val totals: TravelTotals = EMPTY_TRAVEL_TOTALS,
     val isSelectionScope: Boolean = false,
     val groups: List<TravelGroup> = emptyList(),
+    /** Whether [groups] were built with same-project merging (each group is one row otherwise). */
+    val merged: Boolean = true,
     val categories: List<TravelCatRow> = emptyList(),
     val summary: List<TravelSummaryRow> = emptyList(),
     val nameOptions: List<String> = emptyList(),
@@ -204,6 +206,7 @@ class EvalViewModel(private val repo: EvalRepository) : ViewModel() {
             totals = EvalStats.travelTotals(scope),
             isSelectionScope = selected.isNotEmpty(),
             groups = EvalStats.travelGroups(filtered, snap.projects, merge),
+            merged = merge,
             categories = EvalStats.travelCategories(scope),
             summary = EvalStats.travelSummary(scope, f.groupBy),
             nameOptions = all.map { it.name }.filter { it.isNotBlank() }.distinct().sorted(),
@@ -389,6 +392,35 @@ class EvalViewModel(private val repo: EvalRepository) : ViewModel() {
                 clearTravelSelection()
             }
         )
+    }
+
+    /**
+     * Saves a drag-and-drop result. [visibleIds] is the new sequence of the same-day rows that
+     * were dragged together; [onFailed] lets the list drop its optimistic order and snap back.
+     */
+    fun reorderTravelDay(date: String, visibleIds: List<String>, onFailed: () -> Unit) {
+        val ids = EvalCore.buildTravelDayOrder(snapshot.value.travels, date, visibleIds)
+        if (ids == null || _isMutating.value) {
+            onFailed()
+            return
+        }
+        viewModelScope.launch {
+            _isMutating.value = true
+            val res = repo.reorderTravels(date, ids)
+            _isMutating.value = false
+            if (res is ApiResult.Error) {
+                onFailed()
+                when (res.httpStatus) {
+                    401 -> Unit
+                    // Another device changed this day (e.g. moved a row to another date): resync.
+                    409 -> {
+                        toast("差旅记录已变化，已刷新最新数据")
+                        refresh()
+                    }
+                    else -> toast(res.message.ifBlank { "调整差旅顺序失败" })
+                }
+            }
+        }
     }
 
     fun deleteTravel(id: String, onDone: () -> Unit) = mutate(

@@ -73,7 +73,9 @@ data class EvalTravel(
     val detail: String,
     val reimb: String,
     val createdAt: String = "",
-    val updatedAt: String = ""
+    val updatedAt: String = "",
+    /** Manual order within the same date (1-based, smaller = earlier). Read-only; only POST /travels/reorder changes it. */
+    val sortOrder: Int = 0
 )
 
 data class EvalSettings(
