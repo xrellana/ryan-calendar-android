@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.ArrowDownward
 import androidx.compose.material.icons.outlined.ArrowUpward
 import androidx.compose.material.icons.outlined.DirectionsCar
-import androidx.compose.material.icons.outlined.DragIndicator
 import androidx.compose.material.icons.outlined.Flight
 import androidx.compose.material.icons.outlined.Hotel
 import androidx.compose.material.icons.outlined.LocalTaxi
@@ -270,7 +269,7 @@ fun TravelsPage(
                     // dragged as one block. Dates are unique per block because the list is
                     // sorted by date first.
                     else -> items(dayRuns(ui.groups) { it.first.date }, key = { "day:" + it[0].first.date }) { run ->
-                        val card: @Composable (TravelGroup, Modifier?, Boolean) -> Unit = { g, handle, dragging ->
+                        val card: @Composable (TravelGroup, Modifier?, Boolean) -> Unit = { g, gesture, lifted ->
                             TravelGroupCard(
                                 group = g,
                                 selected = selected,
@@ -281,8 +280,8 @@ fun TravelsPage(
                                 onOpen = onOpenTravel,
                                 onReimb = viewModel::setTravelReimb,
                                 onReorderDay = viewModel::reorderTravelDay,
-                                singleRowHandle = handle,
-                                dragging = dragging
+                                singleRowGesture = gesture,
+                                lifted = lifted
                             )
                         }
                         if (run.size == 1 || selecting) {
@@ -295,8 +294,9 @@ fun TravelsPage(
                                 key = { it.first.id },
                                 enabled = !isMutating,
                                 spacing = 10.dp,
-                                onReorder = { ids, onFailed -> viewModel.reorderTravelDay(run[0].first.date, ids, onFailed) }
-                            ) { g, handle, dragging -> card(g, handle, dragging) }
+                                onReorder = { ids, onFailed -> viewModel.reorderTravelDay(run[0].first.date, ids, onFailed) },
+                                onLongPress = viewModel::toggleTravelSelection
+                            ) { g, gesture, lifted -> card(g, gesture, lifted) }
                         }
                     }
                 }
@@ -304,7 +304,7 @@ fun TravelsPage(
                 if (!showSummary && ui.filteredCount > 0 && !selecting) {
                     item(key = "hint") {
                         Text(
-                            "长按差旅可多选，批量修改报销状态；同一天有多笔时，按住右侧拖动手柄可调整先后",
+                            "长按差旅可多选，批量修改报销状态；同一天有多笔时，长按后拖动可调整先后",
                             fontSize = 11.sp,
                             color = AppColors.TextMuted,
                             modifier = Modifier.padding(horizontal = 4.dp)
@@ -348,14 +348,14 @@ private fun TravelGroupCard(
     onOpen: (String) -> Unit,
     onReimb: (String, String) -> Unit,
     onReorderDay: (date: String, ids: List<String>, onFailed: () -> Unit) -> Unit,
-    /** Unmerged list: drag handle of the card's only row, supplied by the day block around it. */
-    singleRowHandle: Modifier? = null,
-    dragging: Boolean = false
+    /** Unmerged list: reorder gesture of the card's only row, supplied by the day block around it. */
+    singleRowGesture: Modifier? = null,
+    lifted: Boolean = false
 ) {
     val anySelected = group.rows.any { it.id in selected }
     EvalCard(
         highlighted = anySelected && group.rows.all { it.id in selected },
-        modifier = if (dragging) Modifier.shadow(8.dp, RoundedCornerShape(14.dp)) else Modifier
+        modifier = if (lifted) Modifier.shadow(8.dp, RoundedCornerShape(14.dp)) else Modifier
     ) {
         Column {
             Column(Modifier.padding(start = 14.dp, end = 14.dp, top = 10.dp, bottom = 4.dp)) {
@@ -381,7 +381,7 @@ private fun TravelGroupCard(
                 }
             }
             HorizontalDivider(color = AppColors.BorderSubtle, modifier = Modifier.padding(horizontal = 14.dp))
-            val line: @Composable (EvalTravel, Modifier?, Boolean) -> Unit = { t, handle, rowDragging ->
+            val line: @Composable (EvalTravel, Modifier?, Boolean) -> Unit = { t, gesture, rowLifted ->
                 TravelLine(
                     t = t,
                     selected = t.id in selected,
@@ -391,12 +391,12 @@ private fun TravelGroupCard(
                     onClick = { if (selecting) onToggle(t.id) else onOpen(t.id) },
                     onLongClick = { onToggle(t.id) },
                     onReimb = { onReimb(t.id, it) },
-                    dragHandle = if (selecting) null else handle,
-                    dragging = rowDragging
+                    reorderGesture = if (selecting) null else gesture,
+                    lifted = rowLifted
                 )
             }
             if (group.rows.size == 1) {
-                line(group.rows[0], singleRowHandle, false)
+                line(group.rows[0], singleRowGesture, false)
             } else {
                 // Merged card: same-day rows of this project group can be dragged among themselves.
                 dayRuns(group.rows) { it.date }.forEach { run ->
@@ -407,8 +407,9 @@ private fun TravelGroupCard(
                             items = run,
                             key = { it.id },
                             enabled = enabled,
-                            onReorder = { ids, onFailed -> onReorderDay(run[0].date, ids, onFailed) }
-                        ) { t, handle, rowDragging -> line(t, handle, rowDragging) }
+                            onReorder = { ids, onFailed -> onReorderDay(run[0].date, ids, onFailed) },
+                            onLongPress = onToggle
+                        ) { t, gesture, rowLifted -> line(t, gesture, rowLifted) }
                     }
                 }
             }
@@ -428,16 +429,19 @@ private fun TravelLine(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onReimb: (String) -> Unit,
-    /** Null hides the handle (single row on its day, or multi-select mode). */
-    dragHandle: Modifier? = null,
-    dragging: Boolean = false
+    /**
+     * Long-press-and-drag gesture from the surrounding day block; it also handles a plain long
+     * press. Null for rows that cannot be reordered, which keep the regular long-press.
+     */
+    reorderGesture: Modifier? = null,
+    lifted: Boolean = false
 ) {
     val cat = EvalCore.travelDisplayCat(t)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (dragging) {
+                if (lifted) {
                     Modifier
                         .shadow(6.dp, RoundedCornerShape(10.dp))
                         .background(AppColors.Surface, RoundedCornerShape(10.dp))
@@ -445,8 +449,13 @@ private fun TravelLine(
                     Modifier
                 }
             )
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(start = 14.dp, end = if (dragHandle != null) 0.dp else 8.dp, top = 6.dp, bottom = 6.dp),
+            .then(
+                // The reorder gesture sits inside the clickable so it sees the press first and
+                // can swallow the release after a long press.
+                if (reorderGesture != null) Modifier.combinedClickable(onClick = onClick).then(reorderGesture)
+                else Modifier.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            )
+            .padding(start = 14.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (selecting) {
@@ -485,19 +494,6 @@ private fun TravelLine(
             enabled = enabled,
             onSelect = onReimb
         )
-        if (dragHandle != null) {
-            Box(
-                modifier = Modifier.size(width = 36.dp, height = 44.dp).then(dragHandle),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Outlined.DragIndicator,
-                    contentDescription = "按住拖动，调整当天顺序",
-                    tint = if (enabled) AppColors.TextMuted else AppColors.BorderStrong,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
     }
 }
 

@@ -1,10 +1,11 @@
 package com.ryancalendar.android.ui.eval
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.awaitTouchSlopOrCancellation
-import androidx.compose.foundation.gestures.verticalDrag
+import androidx.compose.foundation.gestures.awaitLongPressOrCancellation
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,20 +31,25 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import kotlin.math.abs
 
 /** Order shown right after a drop, valid only while the upstream list is still [base]. */
 private data class PendingOrder(val base: List<String>, val order: List<String>)
 
 /**
- * A small, non-lazy column whose rows can be dragged into a new order by a handle.
+ * A small, non-lazy column whose rows are reordered by long-press-and-drag.
  *
- * Meant for short lists such as the travel rows of one day: rows are measured as they are laid
- * out, the dragged row follows the finger while the others slide out of its way, and on release
- * [onReorder] receives the new key order. The new order is shown immediately and kept until the
- * caller's [items] change (the server answered) or the caller invokes the failure callback.
+ * Meant for short lists such as the travel rows of one day. A long press lifts the row; moving
+ * it then drags it while the others slide out of its way, and on release [onReorder] receives
+ * the new key order. Releasing a lifted row without moving it calls [onLongPress] instead, so
+ * the usual long-press action (multi-select) keeps working on the same rows.
  *
- * [itemContent] gets a `handle` modifier to put on the drag handle. The handle consumes the
- * press, so the row's own click / long-press (multi-select) never fires from it.
+ * The new order is shown immediately and kept until the caller's [items] change (the server
+ * answered) or the caller invokes the failure callback.
+ *
+ * [itemContent] gets a `gesture` modifier to put on the row *after* its clickable, so the row
+ * keeps its tap; it is null while [enabled] is false, and the row should then fall back to its
+ * normal long-press handling.
  */
 @Composable
 fun <T> ReorderableColumn(
@@ -51,9 +57,10 @@ fun <T> ReorderableColumn(
     key: (T) -> String,
     enabled: Boolean,
     onReorder: (newKeys: List<String>, onFailed: () -> Unit) -> Unit,
+    onLongPress: (key: String) -> Unit,
     modifier: Modifier = Modifier,
     spacing: Dp = 0.dp,
-    itemContent: @Composable (item: T, handle: Modifier, dragging: Boolean) -> Unit
+    itemContent: @Composable (item: T, gesture: Modifier?, lifted: Boolean) -> Unit
 ) {
     val upstreamKeys = items.map(key)
     val byKey = items.associateBy(key)
@@ -69,6 +76,7 @@ fun <T> ReorderableColumn(
     val currentOrder by rememberUpdatedState(order)
     val currentUpstream by rememberUpdatedState(upstreamKeys)
     val currentOnReorder by rememberUpdatedState(onReorder)
+    val currentOnLongPress by rememberUpdatedState(onLongPress)
 
     val spacingPx = with(LocalDensity.current) { spacing.toPx() }
     val haptic = LocalHapticFeedback.current
@@ -114,10 +122,10 @@ fun <T> ReorderableColumn(
         order.forEachIndexed { index, k ->
             val item = byKey[k] ?: return@forEachIndexed
             key(k) {
-                val isDragging = k == draggingKey
+                val isLifted = k == draggingKey
                 val draggedSlot = draggingKey?.let { slotHeight(it) } ?: 0f
                 val shiftTarget = when {
-                    from < 0 || isDragging -> 0f
+                    from < 0 || isLifted -> 0f
                     index in (from + 1)..target -> -draggedSlot
                     index in target until from -> draggedSlot
                     else -> 0f
@@ -126,13 +134,13 @@ fun <T> ReorderableColumn(
                 // their new slots at once instead of sliding back from their old displacement.
                 val shift = remember(order) { Animatable(0f) }
                 LaunchedEffect(shift, shiftTarget) { shift.animateTo(shiftTarget) }
+                val scale by animateFloatAsState(if (isLifted) 1.02f else 1f, label = "liftScale")
 
-                val handle = if (!enabled) Modifier else Modifier.pointerInput(k) {
+                val gesture = if (!enabled) null else Modifier.pointerInput(k) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        down.consume()
-                        val slop = awaitTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
-                            ?: return@awaitEachGesture
+                        // Null when the finger lifts early or the list starts scrolling first.
+                        val press = awaitLongPressOrCancellation(down.id) ?: return@awaitEachGesture
 
                         val ord = currentOrder
                         val start = ord.indexOf(k)
@@ -141,23 +149,32 @@ fun <T> ReorderableColumn(
                         val maxOffset = (start + 1 until ord.size).sumOf { slotHeight(ord[it]).toDouble() }.toFloat()
 
                         draggingKey = k
-                        dragOffset = (slop.position.y - down.position.y).coerceIn(minOffset, maxOffset)
+                        dragOffset = 0f
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        var travelled = 0f
                         var released = false
                         try {
-                            released = verticalDrag(slop.id) { change ->
-                                dragOffset = (dragOffset + change.positionChange().y).coerceIn(minOffset, maxOffset)
+                            released = drag(press.id) { change ->
+                                val dy = change.positionChange().y
+                                travelled += abs(dy)
+                                dragOffset = (dragOffset + dy).coerceIn(minOffset, maxOffset)
                                 change.consume()
                             }
+                            // Swallow the release so the row's click does not fire as well.
+                            currentEvent.changes.forEach { it.consume() }
                         } finally {
                             val to = targetIndex(ord, k, dragOffset)
                             draggingKey = null
                             dragOffset = 0f
-                            if (released && to >= 0 && to != start) {
-                                val newOrder = ord.toMutableList().apply { removeAt(start); add(to, k) }
-                                val entry = PendingOrder(currentUpstream, newOrder)
-                                pending = entry
-                                currentOnReorder(newOrder) { if (pending === entry) pending = null }
+                            when {
+                                !released -> Unit
+                                to >= 0 && to != start -> {
+                                    val newOrder = ord.toMutableList().apply { removeAt(start); add(to, k) }
+                                    val entry = PendingOrder(currentUpstream, newOrder)
+                                    pending = entry
+                                    currentOnReorder(newOrder) { if (pending === entry) pending = null }
+                                }
+                                travelled < viewConfiguration.touchSlop -> currentOnLongPress(k)
                             }
                         }
                     }
@@ -165,11 +182,15 @@ fun <T> ReorderableColumn(
 
                 Box(
                     Modifier
-                        .zIndex(if (isDragging) 1f else 0f)
-                        .graphicsLayer { translationY = if (isDragging) dragOffset else shift.value }
+                        .zIndex(if (isLifted) 1f else 0f)
+                        .graphicsLayer {
+                            translationY = if (isLifted) dragOffset else shift.value
+                            scaleX = scale
+                            scaleY = scale
+                        }
                         .onSizeChanged { heights[k] = it.height }
                 ) {
-                    itemContent(item, handle, isDragging)
+                    itemContent(item, gesture, isLifted)
                 }
             }
         }
