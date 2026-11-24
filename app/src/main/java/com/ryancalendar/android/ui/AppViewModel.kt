@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.ryancalendar.android.data.repository.ApiResult
 import com.ryancalendar.android.data.repository.CalendarRepository
+import com.ryancalendar.android.data.repository.EvalRepository
 import com.ryancalendar.android.domain.calendar.HolidayIndex
 import com.ryancalendar.android.domain.calendar.WeekLayoutEngine
 import com.ryancalendar.android.domain.model.CalendarCategory
@@ -42,7 +43,8 @@ enum class CalendarViewMode(val label: String) {
 
 class AppViewModel(
     private val appContext: Context,
-    private val repository: CalendarRepository
+    private val repository: CalendarRepository,
+    private val evalRepository: EvalRepository
 ) : ViewModel() {
 
     private val _authState = MutableStateFlow(AuthState.Checking)
@@ -202,7 +204,7 @@ class AppViewModel(
         viewModelScope.launch {
             if (_isSyncing.value) return@launch
             _isSyncing.value = true
-            when (val res = repository.syncFromServer(includeHolidays = true)) {
+            when (val res = syncAll(includeHolidays = true)) {
                 is ApiResult.Success -> {
                     lastForegroundSyncMs = System.currentTimeMillis()
                     emitToast(if (res.data) "已同步最新云端日程" else "当前已是最新数据")
@@ -223,7 +225,7 @@ class AppViewModel(
         if (_isSyncing.value) return
         viewModelScope.launch {
             _isSyncing.value = true
-            when (val res = repository.syncFromServer(includeHolidays = includeHolidays)) {
+            when (val res = syncAll(includeHolidays = includeHolidays)) {
                 is ApiResult.Success -> {
                     lastForegroundSyncMs = System.currentTimeMillis()
                     if (!force && res.data) {
@@ -236,6 +238,16 @@ class AppViewModel(
             }
             _isSyncing.value = false
         }
+    }
+
+    /**
+     * 先拉评估数据：服务端在该接口里自动推进「待开始 → 进行中」时会同时改写关联日程，
+     * 随后的日程同步才能拿到最新内容。
+     */
+    private suspend fun syncAll(includeHolidays: Boolean): ApiResult<Boolean> {
+        val evalRes = evalRepository.refresh()
+        if (evalRes is ApiResult.Error && evalRes.httpStatus == 401) return evalRes
+        return repository.syncFromServer(includeHolidays = includeHolidays)
     }
 
     // -------------------------------------------------------------------------
@@ -366,7 +378,12 @@ class AppViewModel(
             _isMutating.value = false
             when (res) {
                 is ApiResult.Success -> {
-                    emitToast("日程已删除")
+                    if (res.data.isNotBlank()) {
+                        evalRepository.removeProjectLocally(res.data)
+                        emitToast("日程与对应的评估项目已删除")
+                    } else {
+                        emitToast("日程已删除")
+                    }
                     onSuccess()
                 }
                 is ApiResult.Error -> {
@@ -521,11 +538,15 @@ class AppViewModel(
     companion object {
         private const val SESSION_CHECK_TIMEOUT_MS = 5_000L
 
-        fun factory(appContext: Context, repository: CalendarRepository): ViewModelProvider.Factory =
+        fun factory(
+            appContext: Context,
+            repository: CalendarRepository,
+            evalRepository: EvalRepository
+        ): ViewModelProvider.Factory =
             object : ViewModelProvider.Factory {
                 @Suppress("UNCHECKED_CAST")
                 override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                    return AppViewModel(appContext.applicationContext, repository) as T
+                    return AppViewModel(appContext.applicationContext, repository, evalRepository) as T
                 }
             }
     }

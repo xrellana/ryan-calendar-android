@@ -7,13 +7,19 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import com.ryancalendar.android.ui.AppViewModel
 import com.ryancalendar.android.ui.RyanCalendarRoot
+import com.ryancalendar.android.ui.eval.EvalViewModel
 import com.ryancalendar.android.ui.theme.RyanCalendarTheme
 
 class MainActivity : ComponentActivity() {
 
     private val viewModel: AppViewModel by viewModels {
         val app = application as RyanCalendarApp
-        AppViewModel.factory(app, app.container.repository)
+        AppViewModel.factory(app, app.container.repository, app.container.evalRepository)
+    }
+
+    private val evalViewModel: EvalViewModel by viewModels {
+        val app = application as RyanCalendarApp
+        EvalViewModel.factory(app.container.evalRepository)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -21,7 +27,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             RyanCalendarTheme {
-                RyanCalendarRoot(viewModel = viewModel)
+                RyanCalendarRoot(viewModel = viewModel, evalViewModel = evalViewModel)
             }
         }
     }
@@ -29,5 +35,6 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         viewModel.onAppResumed()
+        evalViewModel.onResume()
     }
 }

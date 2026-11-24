@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ryancalendar.android.domain.eval.EvalEnums
 import com.ryancalendar.android.domain.util.ColorUtils
 import com.ryancalendar.android.domain.util.DateUtils
 import com.ryancalendar.android.ui.AppViewModel
@@ -74,7 +75,8 @@ fun EventEditorScreen(
     viewModel: AppViewModel,
     eventId: String?,
     initialDate: LocalDate,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSwitchToProject: (LocalDate) -> Unit = {}
 ) {
     val categories by viewModel.categories.collectAsState()
     val allEvents by viewModel.allEvents.collectAsState()
@@ -122,7 +124,13 @@ fun EventEditorScreen(
     var showEndTimePicker by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    val assessmentPicked = !isEditing && categoryId == EvalEnums.ASSESSMENT_CATEGORY_ID
+
     fun submit() {
+        if (assessmentPicked) {
+            onSwitchToProject(startDate)
+            return
+        }
         val cleanTitle = title.trim()
         if (cleanTitle.isEmpty()) {
             formError = "请输入日程标题"
@@ -205,8 +213,37 @@ fun EventEditorScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            if (assessmentPicked) {
+                val assessName = categories.find { it.id == EvalEnums.ASSESSMENT_CATEGORY_ID }?.name.orEmpty()
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = AppColors.PrimarySoft,
+                    border = BorderStroke(1.dp, AppColors.Primary.copy(alpha = 0.25f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        Text(
+                            text = "「$assessName」日程需通过评估项目录入",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = AppColors.Primary
+                        )
+                        Spacer(Modifier.height(2.dp))
+                        Text(
+                            text = "填写评估项目后会自动生成这条日程，并计入评估统计。",
+                            fontSize = 12.sp,
+                            color = AppColors.TextSecondary
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Button(onClick = { onSwitchToProject(startDate) }, shape = RoundedCornerShape(10.dp)) {
+                            Text("填写评估项目")
+                        }
+                    }
+                }
+            }
+
             // 若来源于 Web 端台账导入，展示只读来源徽标
-            if (editingEvent?.source == "ledger" && editingEvent.ledgerMeta != null) {
+            if ((editingEvent?.source == "ledger" || editingEvent?.source == "eval") && editingEvent.ledgerMeta != null) {
                 val meta = editingEvent.ledgerMeta
                 Surface(
                     shape = RoundedCornerShape(10.dp),
@@ -491,7 +528,15 @@ fun EventEditorScreen(
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
             title = { Text("删除日程？") },
-            text = { Text("确认删除「${editingEvent.title}」吗？删除后会同步从云端移除，无法撤销。") },
+            text = {
+                Text(
+                    if (editingEvent.isEvalLinked) {
+                        "确认删除「${editingEvent.title}」吗？将同步删除评估项目列表中的对应记录（历史差旅保留），无法撤销。"
+                    } else {
+                        "确认删除「${editingEvent.title}」吗？删除后会同步从云端移除，无法撤销。"
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {

@@ -1,5 +1,6 @@
 package com.ryancalendar.android.ui
 
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.BusinessCenter
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Person
@@ -41,7 +43,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.ryancalendar.android.domain.eval.EvalEnums
 import com.ryancalendar.android.domain.util.DateUtils
+import com.ryancalendar.android.ui.eval.EvalScreen
+import com.ryancalendar.android.ui.eval.EvalViewModel
+import com.ryancalendar.android.ui.eval.ProjectEditorScreen
+import com.ryancalendar.android.ui.eval.ProjectPrefill
+import com.ryancalendar.android.ui.eval.TravelEditorScreen
 import com.ryancalendar.android.ui.screens.CalendarScreen
 import com.ryancalendar.android.ui.screens.CategoriesScreen
 import com.ryancalendar.android.ui.screens.EventEditorScreen
@@ -60,6 +68,7 @@ private enum class BottomTab(
 ) {
     CALENDAR("tab_calendar", "日程", Icons.Outlined.CalendarMonth),
     UPCOMING("tab_upcoming", "近期", Icons.Outlined.Notifications),
+    EVAL("tab_eval", "评估", Icons.Outlined.BusinessCenter),
     STATS("tab_stats", "统计", Icons.Outlined.BarChart),
     PROFILE("tab_profile", "我的", Icons.Outlined.Person)
 }
@@ -69,14 +78,34 @@ private object Routes {
     const val CATEGORIES = "categories"
     const val EVENT_EDITOR = "event_editor?eventId={eventId}&date={date}"
 
+    const val EVAL_PROJECT =
+        "eval_project?projectId={projectId}&date={date}&name={name}&level={level}&role={role}&stage={stage}"
+    const val EVAL_TRAVEL = "eval_travel?travelId={travelId}&name={name}&stage={stage}"
+
     fun eventEditor(eventId: String?, date: LocalDate): String {
         val eid = eventId.orEmpty()
         return "event_editor?eventId=$eid&date=$date"
     }
+
+    fun evalProject(projectId: String? = null, prefill: ProjectPrefill? = null): String =
+        "eval_project?projectId=${enc(projectId)}&date=${enc(prefill?.date)}&name=${enc(prefill?.name)}" +
+            "&level=${enc(prefill?.level)}&role=${enc(prefill?.role)}&stage=${enc(prefill?.stage)}"
+
+    fun evalTravel(travelId: String? = null, name: String? = null, stage: String? = null): String =
+        "eval_travel?travelId=${enc(travelId)}&name=${enc(name)}&stage=${enc(stage)}"
+
+    private fun enc(v: String?): String = Uri.encode(v.orEmpty())
+}
+
+private fun stringArgs(vararg names: String) = names.map { n ->
+    navArgument(n) {
+        type = NavType.StringType
+        defaultValue = ""
+    }
 }
 
 @Composable
-fun RyanCalendarRoot(viewModel: AppViewModel) {
+fun RyanCalendarRoot(viewModel: AppViewModel, evalViewModel: EvalViewModel) {
     val authState by viewModel.authState.collectAsState()
     val loginLoading by viewModel.loginLoading.collectAsState()
     val loginError by viewModel.loginError.collectAsState()
@@ -85,6 +114,12 @@ fun RyanCalendarRoot(viewModel: AppViewModel) {
 
     LaunchedEffect(Unit) {
         viewModel.toastMessages.collect { msg ->
+            snackbarHostState.showSnackbar(msg)
+        }
+    }
+    LaunchedEffect(Unit) {
+        evalViewModel.toasts.collect { msg ->
+            snackbarHostState.currentSnackbarData?.dismiss()
             snackbarHostState.showSnackbar(msg)
         }
     }
@@ -120,6 +155,7 @@ fun RyanCalendarRoot(viewModel: AppViewModel) {
         AuthState.Authenticated -> {
             AuthenticatedShell(
                 viewModel = viewModel,
+                evalViewModel = evalViewModel,
                 snackbarHostState = snackbarHostState
             )
         }
@@ -129,6 +165,7 @@ fun RyanCalendarRoot(viewModel: AppViewModel) {
 @Composable
 private fun AuthenticatedShell(
     viewModel: AppViewModel,
+    evalViewModel: EvalViewModel,
     snackbarHostState: SnackbarHostState
 ) {
     val navController = rememberNavController()
@@ -139,6 +176,18 @@ private fun AuthenticatedShell(
     val bottomTabRoutes = remember { BottomTab.entries.map { it.route }.toSet() }
     val showBottomBar = currentRoute in bottomTabRoutes
     val showFab = currentRoute == BottomTab.CALENDAR.route || currentRoute == BottomTab.UPCOMING.route
+    val categories by viewModel.categories.collectAsState()
+    val assessmentName = categories.find { it.id == EvalEnums.ASSESSMENT_CATEGORY_ID }?.name ?: "外出评估"
+
+    // Events generated from an evaluation project are edited through the project form.
+    fun openEvent(eventId: String?, date: LocalDate) {
+        val ev = eventId?.let { id -> viewModel.allEvents.value.find { it.id == id } }
+        if (ev != null && ev.isEvalLinked) {
+            navController.navigate(Routes.evalProject(projectId = ev.evalProjectId))
+        } else {
+            navController.navigate(Routes.eventEditor(eventId, date))
+        }
+    }
 
     Scaffold(
         containerColor = AppColors.CanvasBg,
@@ -199,18 +248,56 @@ private fun AuthenticatedShell(
                 CalendarScreen(
                     viewModel = viewModel,
                     onOpenSearch = { navController.navigate(Routes.SEARCH) },
-                    onOpenEventEditor = { eventId, date ->
-                        navController.navigate(Routes.eventEditor(eventId, date))
-                    }
+                    onOpenEventEditor = { eventId, date -> openEvent(eventId, date) }
                 )
             }
 
             composable(BottomTab.UPCOMING.route) {
                 UpcomingScreen(
                     viewModel = viewModel,
-                    onOpenEvent = { eventId ->
-                        navController.navigate(Routes.eventEditor(eventId, selectedDate))
+                    onOpenEvent = { eventId -> openEvent(eventId, selectedDate) }
+                )
+            }
+
+            composable(BottomTab.EVAL.route) {
+                EvalScreen(
+                    viewModel = evalViewModel,
+                    onOpenProject = { id -> navController.navigate(Routes.evalProject(projectId = id)) },
+                    onNewProject = { prefill -> navController.navigate(Routes.evalProject(prefill = prefill)) },
+                    onOpenTravel = { id -> navController.navigate(Routes.evalTravel(travelId = id)) },
+                    onNewTravel = { navController.navigate(Routes.evalTravel()) }
+                )
+            }
+
+            composable(
+                route = Routes.EVAL_PROJECT,
+                arguments = stringArgs("projectId", "date", "name", "level", "role", "stage")
+            ) { entry ->
+                val args = entry.arguments
+                fun arg(k: String) = args?.getString(k).orEmpty()
+                ProjectEditorScreen(
+                    viewModel = evalViewModel,
+                    projectId = arg("projectId").ifBlank { null },
+                    prefill = ProjectPrefill(arg("name"), arg("level"), arg("role"), arg("stage"), arg("date")),
+                    assessmentCategoryName = assessmentName,
+                    onBack = { navController.popBackStack() },
+                    onAddTravel = { name, stage ->
+                        navController.navigate(Routes.evalTravel(name = name, stage = stage))
                     }
+                )
+            }
+
+            composable(
+                route = Routes.EVAL_TRAVEL,
+                arguments = stringArgs("travelId", "name", "stage")
+            ) { entry ->
+                val args = entry.arguments
+                TravelEditorScreen(
+                    viewModel = evalViewModel,
+                    travelId = args?.getString("travelId")?.ifBlank { null },
+                    prefillName = args?.getString("name").orEmpty(),
+                    prefillStage = args?.getString("stage").orEmpty(),
+                    onBack = { navController.popBackStack() }
                 )
             }
 
@@ -232,7 +319,7 @@ private fun AuthenticatedShell(
                     onSelectEvent = { ev ->
                         val d = DateUtils.parseOrNull(ev.startDate) ?: selectedDate
                         viewModel.selectDate(d)
-                        navController.navigate(Routes.eventEditor(ev.id, d))
+                        openEvent(ev.id, d)
                     }
                 )
             }
@@ -264,7 +351,11 @@ private fun AuthenticatedShell(
                     viewModel = viewModel,
                     eventId = eid,
                     initialDate = initDate,
-                    onBack = { navController.popBackStack() }
+                    onBack = { navController.popBackStack() },
+                    onSwitchToProject = { date ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.evalProject(prefill = ProjectPrefill(date = date.toString())))
+                    }
                 )
             }
         }
