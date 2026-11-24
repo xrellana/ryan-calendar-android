@@ -72,9 +72,17 @@ interface CalendarDao {
         if (holidays.isNotEmpty()) upsertHolidays(holidays)
     }
 
+    @Query("DELETE FROM eval_projects")
+    suspend fun clearEvalProjects()
+
+    @Query("DELETE FROM eval_travels")
+    suspend fun clearEvalTravels()
+
     @Transaction
     suspend fun clearAllUserData() {
         clearCategories()
         clearEvents()
+        clearEvalProjects()
+        clearEvalTravels()
     }
 }

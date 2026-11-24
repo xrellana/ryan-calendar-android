@@ -68,5 +68,5 @@ interface CalendarApiService {
     ): EventResponse
 
     @DELETE("api/events/{id}")
-    suspend fun deleteEvent(@Path("id") id: String): OkResponse
+    suspend fun deleteEvent(@Path("id") id: String): DeleteEventResponse
 }

@@ -39,6 +39,7 @@ data class EventEntity(
     val ledgerStage: String,
     val ledgerLevel: String,
     val ledgerRole: String,
+    val evalProjectId: String,
     val createdAt: String,
     val updatedAt: String
 ) {
@@ -61,7 +62,8 @@ data class EventEntity(
             notes = notes,
             source = source,
             ledgerKey = ledgerKey,
-            ledgerMeta = if (source == "ledger" && meta.isNotEmpty) meta else null,
+            ledgerMeta = if ((source == "ledger" || source == "eval") && meta.isNotEmpty) meta else null,
+            evalProjectId = evalProjectId,
             createdAt = createdAt,
             updatedAt = updatedAt
         )
@@ -106,6 +108,7 @@ fun CalendarEvent.toEntity() = EventEntity(
     ledgerStage = ledgerMeta?.stage.orEmpty(),
     ledgerLevel = ledgerMeta?.level.orEmpty(),
     ledgerRole = ledgerMeta?.role.orEmpty(),
+    evalProjectId = evalProjectId,
     createdAt = createdAt,
     updatedAt = updatedAt
 )

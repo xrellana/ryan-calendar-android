@@ -7,7 +7,9 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.ryancalendar.android.data.remote.EvalSettingsDto
 import com.ryancalendar.android.data.remote.UserDto
+import com.ryancalendar.android.domain.eval.EvalSettings
 import com.ryancalendar.android.domain.model.ReminderSettings
 import com.ryancalendar.android.domain.model.UserProfile
 import kotlinx.coroutines.flow.Flow
@@ -29,6 +31,10 @@ class SettingsStore(
         val REMINDER_ENABLED = booleanPreferencesKey("reminder_enabled")
         val REMINDER_HOUR = intPreferencesKey("reminder_hour")
         val REMINDER_MINUTE = intPreferencesKey("reminder_minute")
+        val EVAL_SETTINGS_JSON = stringPreferencesKey("eval_settings_json")
+        val EVAL_MERGE_NAMES = booleanPreferencesKey("eval_merge_names")
+        val EVAL_LOADED = booleanPreferencesKey("eval_loaded")
+        val EVAL_TRAVEL_MERGE = booleanPreferencesKey("eval_travel_merge")
     }
 
     val cachedUserFlow: Flow<UserProfile?> = context.dataStore.data.map { prefs ->
@@ -75,6 +81,44 @@ class SettingsStore(
 
     suspend fun getCachedUser(): UserProfile? = cachedUserFlow.first()
 
+    data class EvalMeta(val settings: EvalSettings, val mergeNames: Boolean, val loaded: Boolean)
+
+    val evalMetaFlow: Flow<EvalMeta> = context.dataStore.data.map { prefs ->
+        val settings = prefs[Keys.EVAL_SETTINGS_JSON]?.let { raw ->
+            try {
+                json.decodeFromString<EvalSettingsDto>(raw).toDomain()
+            } catch (_: Exception) {
+                null
+            }
+        } ?: EvalSettings.Default
+        EvalMeta(
+            settings = settings,
+            mergeNames = prefs[Keys.EVAL_MERGE_NAMES] ?: true,
+            loaded = prefs[Keys.EVAL_LOADED] ?: false
+        )
+    }
+
+    /** Device-local preference; the web client keeps the same toggle in localStorage. */
+    val evalTravelMergeFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[Keys.EVAL_TRAVEL_MERGE] ?: true
+    }
+
+    suspend fun saveEvalMeta(settings: EvalSettingsDto, mergeNames: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[Keys.EVAL_SETTINGS_JSON] = json.encodeToString(settings)
+            prefs[Keys.EVAL_MERGE_NAMES] = mergeNames
+            prefs[Keys.EVAL_LOADED] = true
+        }
+    }
+
+    suspend fun saveEvalMergeNames(mergeNames: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.EVAL_MERGE_NAMES] = mergeNames }
+    }
+
+    suspend fun saveEvalTravelMerge(merge: Boolean) {
+        context.dataStore.edit { prefs -> prefs[Keys.EVAL_TRAVEL_MERGE] = merge }
+    }
+
     suspend fun saveSyncMeta(lastSyncMs: Long, serverUpdatedAt: String) {
         context.dataStore.edit { prefs ->
             prefs[Keys.LAST_SYNC_MS] = lastSyncMs
@@ -90,6 +134,9 @@ class SettingsStore(
             prefs.remove(Keys.CACHED_USER_JSON)
             prefs.remove(Keys.LAST_SYNC_MS)
             prefs.remove(Keys.SERVER_UPDATED_AT)
+            prefs.remove(Keys.EVAL_SETTINGS_JSON)
+            prefs.remove(Keys.EVAL_MERGE_NAMES)
+            prefs.remove(Keys.EVAL_LOADED)
         }
     }
 
